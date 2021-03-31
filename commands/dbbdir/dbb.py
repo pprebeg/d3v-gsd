@@ -1,12 +1,14 @@
 import openmesh as om
+import os
 import numpy as np
-from dbbdir import myfunctions as mf
-from hullformdir.hullform import HullForm
+import copy
 import csv
+import dbbdir.myfunctions as mf
+from hullformdir.hullform import HullForm
 #d3v imports
-from geometry import Geometry
+from extendedgeometry import ExtendedGeometry
 
-class DBBGeometry (Geometry):
+class DBBGeometry (ExtendedGeometry):
 	def __init__(self):
 		super().__init__()
 		self.subdivboxes=[]
@@ -57,7 +59,7 @@ class DBBProblem ():
 			self.decks.append(DBBDeck(self.hull, deckz_list[deckIndex], deckIndex)) 
 			
 		#make blocks
-		with open(block_data_path, "_r") as csv_file:
+		with open(block_data_path, "r") as csv_file:
 			csv_reader = csv.DictReader(csv_file)
 			for row in csv_reader:	#each row contains 1 block data
 				deck  = int(row["deck"])
@@ -129,7 +131,7 @@ class DBBHullForm (HullForm):
 		self.mesh = mf.make_form(scale = self.scale, move_vector = self.position)
 
 		
-class DBBDeck(Geometry):
+class DBBDeck(ExtendedGeometry):
 	def __init__(self, hullform, z, deckIndex):
 		super().__init__()
 		self.hullform = hullform
@@ -173,7 +175,7 @@ class DBBDeck(Geometry):
 		
 		#print(deck_points[18],deck_points[19],deck_points[20],)
 		#print(np.allclose(deck_points[18],deck_points[19]))
-		#self.mesh = mf.cut_meshes(self.mesh, self.hullformdir.mesh) 	#predugo traje
+		#self.mesh = mf.cut_meshes(self.mesh, self.hullform.mesh) 	#predugo traje
 
 	def move(self, move_vector):
 		self.z += move_vector[2]
@@ -199,7 +201,7 @@ class DBBDeck(Geometry):
 		
 		
 		
-class DBB(Geometry):
+class DBB(ExtendedGeometry):
 	def __init__(self, hullform, deck:DBBDeck,block_dims, position, abspath, id, type):
 		super().__init__()
 		self.folderpath = abspath
@@ -211,7 +213,7 @@ class DBB(Geometry):
 		self.type = type
 		self.genMesh()
 		self.cutMesh()
-		#print(self.hullformdir.filename)
+		#print(self.hullform.filename)
 		
 	def regenerateMesh(self):
 		self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
@@ -256,12 +258,12 @@ class DBB(Geometry):
 			# bdims1 = copy.copy(self.block_dims)
 			# bdims1[1] = -pos1[1]
 			
-			# cut_mesh1 = mf.cut_mesh(data[0], self.hullformdir.mesh, bdims1, pos1)
+			# cut_mesh1 = mf.cut_mesh(data[0], self.hullform.mesh, bdims1, pos1) 
 			# pos2 = copy.copy(self.position)
 			# pos2[1] = 0.0
 			# bdims2 = copy.copy(self.block_dims)
 			# bdims2[1] = self.block_dims[1] + self.position[1]  #pos[1] je negativan
-			# cut_mesh2 = mf.cut_mesh(data[1], self.hullformdir.mesh, bdims2, pos2)		#different block dims and pos from 1
+			# cut_mesh2 = mf.cut_mesh(data[1], self.hullform.mesh, bdims2, pos2)		#different block dims and pos from 1
 			#cut_mesh = cut_mesh2
 			# cut_mesh = mf.soft_merge_meshes([cut_mesh1, cut_mesh2])
 		# else:
@@ -273,8 +275,8 @@ class DBB(Geometry):
 		
 		
 		
-		#mf.fit_block_to_form(self.mesh, self.block_dims, self.position, self.hullformdir.mesh)
-		#mf.cut_meshes(self.mesh, self.hullformdir.mesh)
+		#mf.fit_block_to_form(self.mesh, self.block_dims, self.position, self.hullform.mesh)
+		#mf.cut_meshes(self.mesh, self.hullform.mesh)
 		pass
 		
 	def calcVolume(self):
