@@ -1,12 +1,13 @@
 from PySide2.QtWidgets import QApplication, QMenu
 from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout
-from commands import Command
-from iohandlers import IOHandler
-from signals import Signals
 from dbbdir.dbb import DBBProblem,DBB,DBBHullForm, DBBDeck
 import os
 from PySide2.QtCore import Slot
 from dbbdir import dbbmenus as mm
+#d3v imports
+from commands import Command
+from iohandlers import IOHandler
+from signals import Signals
 
 
 class DBBCommand(Command):
@@ -182,7 +183,7 @@ class DBBImporter(IOHandler):
 		if len(fileName) < 1:
 			return
 		filename, file_extension = os.path.splitext(fileName)
-		if file_extension != ".dbb":
+		if file_extension != ".dbbdir":
 			return
 		self.dbbproblem = DBBProblem(fileName)
 		self.fsetproblem(self.dbbproblem)
@@ -194,7 +195,7 @@ class DBBImporter(IOHandler):
 			Signals.get().geometryImported.emit(dbb)
 
 	def getImportFormats(self):
-		return [".dbb"]
+		return [".dbbdir"]
 
 class DialogDBBProps(QDialog):
 	def __init__(self, parent):

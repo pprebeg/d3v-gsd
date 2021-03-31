@@ -1,12 +1,14 @@
-from iohandlers import IOHandler
-from signals import Signals
-from geometry import Geometry
+
 import openmesh as om
 import os
 import numpy as np
 import csv
 import math as Math
 import time
+#d3v imports
+from iohandlers import IOHandler
+from signals import Signals
+from geometry import Geometry
 
 # import matplotlib.pyplot as plt
 
@@ -994,7 +996,7 @@ class HullForm(Geometry):
     def hullGen(self, shipdata: dict, pdecks: list, nump):
         # gs is the grid size of a cell, in pixels
         # Reminder to make gridsize scaled to the screen width
-        # Sets hullform data to slider values
+        # Sets hullformdir data to slider values
         shipdata["loa_val"] = shipdata["loa_val"]
         shipdata["boa_val"] = shipdata["boa_val"]
 

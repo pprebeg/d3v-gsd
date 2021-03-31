@@ -1,19 +1,20 @@
 from PySide2.QtWidgets import QApplication, QMenu, QFormLayout,QWidget,QHeaderView,QSlider,QLineEdit
 from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout,QVBoxLayout,QHBoxLayout,QTableView,QTextEdit,QLabel
-from commands import Command
-from iohandlers import IOHandler
-import openmesh as om
-import numpy as np
-from signals import Signals
-from hullformdir.hullform import HullForm
-import os
 from PySide2.QtCore import Slot,Qt
 from PySide2.QtCore import QAbstractTableModel, QModelIndex, QRect
 from PySide2.QtGui import QColor, QPainter
 from PySide2.QtCharts import QtCharts
 from PySide2.QtCore import SIGNAL,SLOT
 from scipy.optimize import minimize
-
+import openmesh as om
+import numpy as np
+import os
+#d3v imports
+from signals import Signals
+from commands import Command
+from iohandlers import IOHandler
+#d3v-gsd
+from hullformdir.hullform import HullForm
 
 class HullFormCommand(Command):
     def __init__(self):
