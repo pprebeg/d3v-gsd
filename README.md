@@ -15,7 +15,8 @@ d3v-gsd (Design visualizer for General ship design)
 
 ## Usage
 
-- Run d3v/src/main.py using argument: -a path_to_d3v-gsd_folder<br>e.g. if d3v is located in D:/dev/d3v, and d3v-gsd in D:/dev/d3v-gsd: <br> D:/dev/d3v/main.py -a D:/dev/d3v-gsd\
+- Run d3v/src/main.py using argument: -a path_to_d3v-gsd_folder<br>e.g. if d3v is located in D:/dev/d3v, and d3v-gsd in D:/dev/d3v-gsd: <br>
+  python D:/dev/d3v/main.py -a D:/dev/d3v-gsd\
   Note: the commands folder needs to be the subfolder in d3v-gsd folder
 - Use File/Import geometry to open *.huf (hull form) or *.dbb (design build block) file
 
