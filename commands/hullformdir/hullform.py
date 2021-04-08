@@ -64,14 +64,9 @@ class HullForm(Geometry):
     def __init__(self, fileName):
         super().__init__()
         self.filename = fileName
-        self.shipdata = {}
-        self.pdecks =[]
-        self.pbulkheads = []
         self.hfmq = HullFormMeshQuality()
-        results = self.readShipData()
-        self.shipdata = results[0]
-        self.pdecks = results[1]
-        self.pbulkheads = results[2]
+        self.shipdata,self.pdecks,self.pbulkheads = self.readShipData()
+
         self.h = []  # positive y waterlines
         self.wlinesNeg = []  # negative y waerlines
         self.wlKeel = []  # keel waterline (one waterline)
@@ -820,12 +815,14 @@ class HullForm(Geometry):
         area = 1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))
         return abs(area)
 
+    def calcAreaTria2Dxy(self,p1,p2,p3):
+        return self.calcAreaTria3D(p1[0:2],p2[0:2],p3[0:2])
 
     def calcAreaTria3D(self,p1,p2,p3):
         p1p2= np.subtract(p2,p1)
         p1p3 = np.subtract(p3, p1)
         u=np.cross(p1p2,p1p3)
-        return np.linalg.norm(u/2)
+        return np.linalg.norm(u)/2
 
     def getVolume(self, h):
         mesh = self.mesh
@@ -1231,5 +1228,4 @@ class HullForm(Geometry):
             splitdata = str(shipset['BHPos']).split(" ")
             for dp in splitdata:
                 pbulkheads.append(float(dp))
-        results = [shipdata,pdecks,pbulkheads]
-        return  results
+        return  shipdata,pdecks,pbulkheads
