@@ -65,7 +65,7 @@ class HullForm(Geometry):
         super().__init__()
         self.filename = fileName
         self.hfmq = HullFormMeshQuality()
-        self.shipdata,self.pdecks,self.pbulkheads = self.readShipData()
+        self.shipdata,self.pdecks,self.pbulkheads,self.dict_decks = self.readShipData()
 
         self.h = []  # positive y waterlines
         self.wlinesNeg = []  # negative y waerlines
@@ -122,11 +122,49 @@ class HullForm(Geometry):
         print(results)
         return results
 
-    def getResults(self,h,seaDensity):
+    def getResults(self, h, seaDensity):
+        indMet = 0
+        if indMet == 0:
+            return self.getResultsOrec()
+        if indMet == 1:
+            return self.getResultsErh()
+
+    def getResultsOrec(self,h,seaDensity):
         tsStart = time.perf_counter()
         results = []
-        fvs = self.mesh.fv_indices().tolist()
-        points = self.mesh.points().tolist()
+        if not self.mesh.has_face_normals():
+            self.mesh.request_face_normals()
+        fvs = self.mesh.fv_indices()
+        points = self.mesh.points()
+        normals = self.mesh.face_normals()
+        xmf = 50
+        # h=9
+        bcwl = self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs,points)
+        h = bcwl[0]
+        volume = bcwl[1]
+        area = bcwl[2]
+        Xwl = bcwl[3]
+        KBz = bcwl[4]
+        KBx = bcwl[5]
+        Ib = bcwl[6]
+        Il = bcwl[7]
+        Lwl,Bwl = self.getLwlBwl(h,fvs,points)
+        mfarea = self.getMainFrameArea(xmf, h, fvs, points)
+        hsdata = self.getHydrostaticData(seaDensity,h,volume,area,Ib,Il,KBz,Lwl,2*Bwl,mfarea)
+        dtAll = time.perf_counter() - tsStart
+        print("Hydrostatic results calc time:", dtAll)
+        results = bcwl+hsdata
+        print(results)
+        return results
+
+    def getResultsErh(self,h,seaDensity):
+        tsStart = time.perf_counter()
+        results = []
+        if not self.mesh.has_face_normals():
+            self.mesh.request_face_normals()
+        fvs = self.mesh.fv_indices()
+        points = self.mesh.points()
+        normals = self.mesh.face_normals()
         xmf = 50
         # h=9
         bcwl = self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs,points)
@@ -295,6 +333,11 @@ class HullForm(Geometry):
                 area3D = self.calcAreaTria3D(p[0],p[1],p[2])
                 Swet+=area3D
 
+                av = self.calcTriaAreaVector(p[0],p[1],p[2])
+                area = np.linalg.norm(av)
+                zvec = np.array([0,0,1])
+                area2d =  np.dot(av,zvec)
+                area2d = np.dot(np.linalg.norm(av), zvec)*area
                 # Volume
                 hA = h - Az
                 hB = h - Bz
@@ -824,6 +867,12 @@ class HullForm(Geometry):
         u=np.cross(p1p2,p1p3)
         return np.linalg.norm(u)/2
 
+    def calcTriaAreaVector(self,p1,p2,p3):
+        p1p2= np.subtract(p2,p1)
+        p1p3 = np.subtract(p3, p1)
+        u=np.cross(p1p2,p1p3)
+        return u/2
+
     def getVolume(self, h):
         mesh = self.mesh
         vol =0
@@ -965,6 +1014,7 @@ class HullForm(Geometry):
 
         whsPos = []
         whsNeg = []
+
         whsi = []
         whsPos.append(whsi)
         whsNeg.append(whsi)
@@ -1160,6 +1210,7 @@ class HullForm(Geometry):
     def readShipData(self):
         shipdata = {}
         pdecks = []
+        dict_decks = {}
         pbulkheads = []
         with open(self.filename, newline='') as csvfile:
             f = csv.DictReader(csvfile)
@@ -1223,9 +1274,19 @@ class HullForm(Geometry):
 
             draft = shipdata["draft_val"]
             splitdata = str(shipset['DeckPos']).split(" ")
+            nss = 0
             for dp in splitdata:
-                pdecks.append(float(dp))
+                z_deck=float(dp)
+                pdecks.append(z_deck)
+                if z_deck > draft:
+                    nss+=1
             splitdata = str(shipset['BHPos']).split(" ")
             for dp in splitdata:
                 pbulkheads.append(float(dp))
-        return  shipdata,pdecks,pbulkheads
+            splitdata = str(shipset['Decks']).split(" ")
+            i=0
+            for z_deck in pdecks:
+                id_deck=nss-i
+                dict_decks[id_deck] = i
+                i+=1
+        return  shipdata,pdecks,pbulkheads,dict_decks

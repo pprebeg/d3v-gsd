@@ -63,22 +63,26 @@ class DBBProblem ():
 			csv_reader = csv.DictReader(csv_file)
 			for row in csv_reader:	#each row contains 1 block data
 				deck  = int(row["deck"])
+				segment = str(row["segment"])
+				zone = str(row["zone"])
 				Ax = float(row["Ax"])
 				Ay = float(row["Ay"])	
 				Az = self.decks[deck].z
-				x = float(row["x"])
-				y = float(row["y"])
+				x = float(row["b"])
+				y = float(row["a"])
 				id = str(row["identifier"])
 				type = str(row["type"])
 				try:
-					z = self.decks[deck - 1].z - self.decks[deck].z
+					#z = self.decks[deck - 1].z - self.decks[deck].z
+					index_deck = self.hull.dict_decks[deck]
+					z= self.decks[index_deck-1].z-self.decks[index_deck].z
 				except IndexError:
 					print("Invalid deck position")
 				else:
 					block_dims = np.array([x,y,z])
 					position_A = np.array([Ax,Ay])
 				
-					block = DBB(self.hull, self.decks[deck], block_dims, position_A, abspath, id, type)
+					block = DBB(self.hull, self.decks[index_deck], block_dims, position_A, abspath, id, type,segment,zone)
 					self.dbbs.append(block)
 				
 		#print(self.hull.wlinesNeg)
@@ -202,7 +206,7 @@ class DBBDeck(ExtendedGeometry):
 		
 		
 class DBB(ExtendedGeometry):
-	def __init__(self, hullform, deck:DBBDeck,block_dims, position, abspath, id, type):
+	def __init__(self, hullform, deck:DBBDeck,block_dims, position, abspath, id, type,segment,zone):
 		super().__init__()
 		self.folderpath = abspath
 		self.hullform= hullform
@@ -211,6 +215,8 @@ class DBB(ExtendedGeometry):
 		self.block_dims=block_dims
 		self.id = id
 		self.type = type
+		self.segment = segment
+		self.zone = zone
 		self.genMesh()
 		self.cutMesh()
 		#print(self.hullform.filename)

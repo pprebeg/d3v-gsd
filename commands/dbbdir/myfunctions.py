@@ -1167,6 +1167,8 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 
 	#get form_inside_vh_idx and extract form segment:
 	form_data = get_faces_near_block2(block_mesh, form_mesh, block_dims, block_position)
+	if form_data[0].size == 0:
+		return block_mesh
 	form_fh_idx_to_check = get_neigbour_faces2(form_data[0], form_mesh,block_dims, block_position ,n = 2)
 	form_inside_vh_idx = form_data[1]
 	data1 = extract_mesh2(form_fh_idx_to_check, form_mesh, form_inside_vh_idx)		#duplikati u originalnoj formi!
@@ -2072,6 +2074,8 @@ def soft_merge_meshes(meshes, vh_idx_to_sync_list = None):	#meshes je lista sa m
 	if vh_idx_to_sync_list is None:
 		for mesh in meshes:
 			mesh_fvi = mesh.face_vertex_indices()
+			if mesh_fvi.size==0:
+				continue
 			merged_fvi = np.append(merged_fvi, mesh_fvi + points.shape[0], axis = 0)				#+points.shape[0] je tu da poreda face_vertex_indices sa njihovim indexom u novom arrayu
 			points = np.append(points, mesh.points(), axis = 0)
 		
