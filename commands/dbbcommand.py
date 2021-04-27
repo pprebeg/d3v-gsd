@@ -1,8 +1,8 @@
 from PySide2.QtWidgets import QApplication, QMenu
-from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout
+from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout,QToolTip
 from dbbdir.dbb import DBBProblem,DBB,DBBHullForm, DBBDeck
 import os
-from PySide2.QtCore import Slot
+from PySide2.QtCore import Slot,Qt,QPoint
 import dbbdir.dbbmenus as mm
 #d3v imports
 from commands import Command
@@ -78,6 +78,18 @@ class DBBCommand(Command):
 	@Slot()
 	def registerSelection(self, si):
 		self.si=si
+		if si.isEmpty():
+			pass
+		else:
+			currDBB = self.si.getGeometry()
+			print(self.dbbproblem)
+			if isinstance(currDBB, DBB):
+				pos: QPoint = self.mainwin.pos()
+				pos.setX(pos.x() + self.mainwin.glWin.dragInfo.wStartPos.x() + 20)
+				pos.setY(pos.y() + self.mainwin.glWin.size().height() - self.mainwin.glWin.dragInfo.wStartPos.y())
+				msg = currDBB.get_info()
+				QApplication.instance().clipboard().setText(str(msg))
+				QToolTip.showText(pos, msg, msecShowTime=10)
 
 	def onGenerateTestProblerm(self):
 		FormMenu = mm.AddForm_Dialog()

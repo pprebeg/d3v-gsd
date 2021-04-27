@@ -220,7 +220,17 @@ class DBB(ExtendedGeometry):
 		self.genMesh()
 		self.cutMesh()
 		#print(self.hullform.filename)
-		
+		self.volume = mf.calc_mesh_volume(self.mesh)
+	def get_info(self)->str:
+		msg = 'DBB'
+		msg += '\nid = '+str(self.id)
+		msg += '\ntype = ' + str(self.type)
+		msg += '\nsegment = ' + str(self.segment)
+		msg += '\nzone = ' + str(self.zone)
+		msg += '\nposition = ' + str(self.position)
+		msg += '\ndimensions = ' + str(self.block_dims)
+		msg += '\nvolume = ' + str(self.volume)
+		return msg
 	def regenerateMesh(self):
 		self.mesh= mf.make_block(block_dims = self.block_dims, move_vector = self.position)
 
