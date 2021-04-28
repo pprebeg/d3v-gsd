@@ -55,8 +55,10 @@ class DBBProblem ():
 		#deckz_list.append(self.hull.pdecks[2])
 		#deckz_list.append(self.hull.pdecks[3])
 		#deckz_list.append(self.hull.pdecks[4])
-		for deckIndex in range(len(deckz_list)):
-			self.decks.append(DBBDeck(self.hull, deckz_list[deckIndex], deckIndex)) 
+		num_decks = len(self.hull.pdecks)-1
+		for key,value in self.hull.dict_decks.items():
+			if value < (num_decks):
+				self.decks.append(DBBDeck(self.hull, key))
 			
 		#make blocks
 		with open(block_data_path, "r") as csv_file:
@@ -84,13 +86,25 @@ class DBBProblem ():
 				
 					block = DBB(self.hull, self.decks[index_deck], block_dims, position_A, abspath, id, type,segment,zone)
 					self.dbbs.append(block)
-				
+		self.segment_blocks = self.prep_dbb_organize_dicts()
 		#print(self.hull.wlinesNeg)
 		#print(self.hull.wlinesPos[1])
 		#print(self.hull)
 		#print(len(self.decks))
 		#print(self.dbbs)
 		#print(self.filename)
+	def prep_dbb_organize_dicts(self):
+		d_segments = {}
+		for dbb in self.dbbs:
+			key = dbb.segment
+			dbblist = d_segments.get(key)
+			if dbblist is None:
+				dbblist = []
+				d_segments[key]= dbblist
+			dbblist.append(dbb)
+		return d_segments
+
+
 	def testProblem(self, scale, block_dims):
 		self.hull= DBBHullForm("", scale)
 		self.dbbs.append(DBB(self.hull,0))
@@ -136,14 +150,24 @@ class DBBHullForm (HullForm):
 
 		
 class DBBDeck(ExtendedGeometry):
-	def __init__(self, hullform, z, deckIndex):
+	def __init__(self, hullform, deck_code):
 		super().__init__()
 		self.hullform = hullform
-		self.z = z
-		self.deckIndex = deckIndex
+		self._id = deck_code
 		self.genMesh()
 
-	
+	@property
+	def id(self):
+	    return self._id
+
+	@property
+	def deckIndex(self):
+	    return self.hullform.dict_decks[self._id]
+
+	@property
+	def z(self):
+	    return self.hullform.pdecks[self.deckIndex]
+
 	def regenerateMesh(self):
 		self.mesh = om.TriMesh()
 

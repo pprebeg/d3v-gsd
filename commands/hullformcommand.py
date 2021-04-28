@@ -1,6 +1,6 @@
 from PySide2.QtWidgets import QApplication, QMenu, QFormLayout,QWidget,QHeaderView,QSlider,QLineEdit
 from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout,QVBoxLayout,QHBoxLayout,QTableView,QTextEdit,QLabel
-from PySide2.QtWidgets import QTreeView,QMainWindow
+from PySide2.QtWidgets import QTreeView,QMainWindow,QTreeWidgetItem
 from PySide2.QtCore import Slot,Qt
 from PySide2.QtCore import QAbstractTableModel, QModelIndex, QRect
 from PySide2.QtGui import QColor, QPainter
@@ -24,7 +24,7 @@ class HullFormCommand(Command):
         app.registerIOHandler(HullFormImporter())
         self.mainwin = app.mainFrame
         self._tree: QTreeView = self.mainwin.window.findChild(QTreeView, "geometryTree")
-        self._tree.hide()
+        #self._tree.hide()
         self.hf_prop = DialogHullFormModify(self.mainwin)
         self.hf_opt = DialogHullFormOptimize(self.mainwin)
         self.hf_hydroCurves = DialogHullFormHydrostaticCurves(self.mainwin)
@@ -59,8 +59,11 @@ class HullFormCommand(Command):
         #self._menuMain.setEnabled(False)
 
 
+
         Signals.get().geometryAdded.connect(self.registerHullForm)
         Signals.get().selectionChanged.connect(self.registerSelection)
+
+
 
     @Slot()
     def registerHullForm(self, hullForm):
