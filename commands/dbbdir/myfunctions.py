@@ -2330,7 +2330,7 @@ def make_block(block_dims = np.array([20,6,3]), move_vector = np.array([0,0,0]))
 
 def make_deck(wline_points, subdivide = False):
 	#clean duplicates
-	wline_points = np.unique(wline_points, axis = 0) 
+	#wline_points = np.unique(wline_points, axis = 0)
 	central_points = np.empty((0,3))
 	for point in wline_points:
 		if np.isclose(point[1], 0) ==  False:

@@ -2,8 +2,9 @@ from PySide2.QtWidgets import QApplication, QMenu
 from PySide2.QtWidgets import QDialog, QPushButton,QGridLayout,QToolTip,QCheckBox,QComboBox
 from PySide2.QtWidgets import QTreeView,QMainWindow,QVBoxLayout,QHBoxLayout,QSizePolicy
 from PySide2.QtWidgets import QTreeWidget,QTreeWidgetItem,QDockWidget,QWidget,QGroupBox
-from dbbdir.dbb import DBBProblem,DBB,DBBHullForm, DBBDeck
+from dbbdir.dbb import DBBBase
 from dbbdir.dbb import DBBProblem_new,DBBBaseAll,DBBDeckHull,DBBDeckPlate,DBBDeckUnitBase,DBBSegment,DBBCompartment
+
 import os
 from PySide2.QtCore import Slot,Qt,QPoint
 import dbbdir.dbbmenus as mm
@@ -74,7 +75,7 @@ class DBBCommand(Command):
 		self._model_tree_dock,self._model_tree = self._init_treeveiew()
 
 
-		Signals.get().geometryAdded.connect(self.registerDBB)
+		Signals.get().geometryImported.connect(self.registerDBB)
 		Signals.get().selectionChanged.connect(self.registerSelection)
 		self.dbb = 0
 
@@ -83,7 +84,7 @@ class DBBCommand(Command):
 		for geo in geo_del:
 			Signals.get().geometryRemoved.emit(geo)
 		for geo in geo_add:
-			Signals.get().geometryAdded.emit(geo)
+			Signals.get().geometryImported.emit(geo)
 		for geo in geo_reb:
 			Signals.get().geometryRebuild.emit(geo)
 
@@ -93,6 +94,7 @@ class DBBCommand(Command):
 		tree_dock.setWidget(tree)
 		tree_dock.setFloating(False)
 		self.mainwin.addDockWidget(Qt.LeftDockWidgetArea, tree_dock)
+		tree.setHeaderHidden(True)
 		tree.show()
 		tree_dock.hide()
 		return tree_dock,tree
@@ -114,7 +116,7 @@ class DBBCommand(Command):
 
 	@Slot()
 	def registerDBB(self, dbbproblem):
-		if isinstance(dbbproblem,DBBProblem):
+		if isinstance(dbbproblem,DBBProblem_new):
 			self.dbbproblem=dbbproblem
 			self.menuMain.setEnabled(True)
 
@@ -127,7 +129,7 @@ class DBBCommand(Command):
 		else:
 			currDBB = self.si.getGeometry()
 			print(self.dbbproblem)
-			if isinstance(currDBB, DBB):
+			if isinstance(currDBB, DBBBaseAll):
 				pos: QPoint = self.mainwin.pos()
 				pos.setX(pos.x() + self.mainwin.glWin.dragInfo.wStartPos.x() + 20)
 				pos.setY(pos.y() + self.mainwin.glWin.size().height() - self.mainwin.glWin.dragInfo.wStartPos.y())
@@ -140,14 +142,14 @@ class DBBCommand(Command):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
 			print(self.dbbproblem)
-			if isinstance(currDBB, DBB) or isinstance(currDBB, DBBHullForm) or isinstance(currDBB, DBBDeck):
+			if isinstance(currDBB, DBBBaseAll):
 				self.dbbproblem.dbbs.remove(currDBB)
 				Signals.get().geometryRemoved.emit(currDBB)	#refresha!!!!!!
 	
 	def onMoveDBB(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB, DBB) or isinstance(currDBB, DBBHullForm) or isinstance(currDBB, DBBDeck):
+			if isinstance(currDBB, DBBBaseAll):
 				MoveMenu = mm.Move_Dialog()
 				move_vector = MoveMenu.run()
 				if move_vector is not None:
@@ -160,7 +162,7 @@ class DBBCommand(Command):
 	def onSetPosition(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB,DBB) or isinstance(currDBB,DBBHullForm) or isinstance(currDBB,DBBDeck):
+			if isinstance(currDBB,DBBBaseAll):
 				SetPositionMenu = mm.SetPosition_Dialog()
 				new_position = SetPositionMenu.run()
 				if new_position is not None:
@@ -170,49 +172,31 @@ class DBBCommand(Command):
 	def onCutBlock(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB,DBB):
+			if isinstance(currDBB,DBBBase):
 				currDBB.cutMesh()
 				Signals.get().geometryRebuild.emit(currDBB)	#refresha!!!!!!
 		
 	def onMeshVolume(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB,DBB):
+			if isinstance(currDBB,DBBBase):
 				currDBB.calcVolume()
 	
 	
 	def onIsClosed(self):
 		if self.si.haveSelection():
 			currDBB=self.si.getGeometry()
-			if isinstance(currDBB,DBB):
+			if isinstance(currDBB,DBBBase):
 				currDBB.IsClosed()
 	
 	def onImportFromCsv(self):
 		ImportFromCsvMenu = mm.ImportFromCsvMenu_Dialog()
 		folder_path = ImportFromCsvMenu.run()	#dodaj jos uvijet da se u folderu nalaze prave datoteke
 
-		
-		self.dbbproblem = DBBProblem("")
-		self.dbbproblem.readProblem(folder_path)
-		#make form from huf
-		#with open(huf_path, "_r") as csv:
-		
-		#tu ih emmita u vizualizaciju
-		Signals.get().geometryImported.emit(self.dbbproblem.hull)
-		for deck in self.dbbproblem.decks:
-			Signals.get().geometryImported.emit(deck)
-		for dbb in self.dbbproblem.dbbs:
-			Signals.get().geometryImported.emit(dbb)
-		#self.menuInitTestProblem.setEnabled(False)
+		self.dbbproblem = DBBProblem_new(folder_path)
+		self.setProblem(self.dbbproblem)
 
-		
-		
-		
-		
-		
-		
-		
-		
+
 		
 class DBBImporter(IOHandler):
 	def __init__(self,func_set_problem):
@@ -321,17 +305,21 @@ class ModelControlDock(QDockWidget):
 		mainLayout.addWidget(gbx_components)
 		widget.setLayout(mainLayout)
 		self.setWidget(widget)
-		#set events
-		self._cbx_view_starbside.stateChanged.connect(self.on_change_cbx_port_starboard)
-		self._cbx_view_portside.stateChanged.connect(self.on_change_cbx_port_starboard)
+
 		#set defaults
 		self._cbx_view_portside.setChecked(True)
 		self._cbx_view_starbside.setChecked(True)
-		self._cbx_view_decks.setChecked(True)
-		self._cbx_view_hullbtwdecks.setChecked(True)
-		self._cbx_view_segments.setChecked(False)
-		self._cbx_view_compartments.setChecked(True)
-
+		self._cbx_view_decks.setChecked(DBBDeckPlate.show_deck_plate)
+		self._cbx_view_hullbtwdecks.setChecked(DBBDeckHull.show_deck_hull)
+		self._cbx_view_segments.setChecked(DBBSegment.show_segments)
+		self._cbx_view_compartments.setChecked(DBBCompartment.show_compartments)
+		# set events
+		self._cbx_view_starbside.stateChanged.connect(self.on_change_cbx_port_starboard)
+		self._cbx_view_portside.stateChanged.connect(self.on_change_cbx_port_starboard)
+		self._cbx_view_segments.stateChanged.connect(self.on_change_cbx_show_type)
+		self._cbx_view_compartments.stateChanged.connect(self.on_change_cbx_show_type)
+		self._cbx_view_decks.stateChanged.connect(self.on_change_cbx_show_type)
+		self._cbx_view_hullbtwdecks.stateChanged.connect(self.on_change_cbx_show_type)
 
 	@property
 	def dbb_cmnd(self):
@@ -385,24 +373,39 @@ class ModelControlDock(QDockWidget):
 
 
 	def on_change_design(self,i):
+		QApplication.setOverrideCursor(Qt.WaitCursor)
 		try:
 			self._tree.itemChanged.disconnect()
 		except Exception:
 			pass
 		id_design = self._combo_curr_design.currentText()
-		geo_add_reb_del = self.dbb_prob.set_current_design(id_design)
+		geo_add_reb_del = self.dbb_prob.set_current_design(id_design,self.show_portside,self.show_starbside)
 		self._populate_treeveiew(self._tree, self.dbb_prob)
 		self._tree.itemChanged.connect(self._handle_tree_ItemChanged)
 		self.dbb_cmnd.send_signals(geo_add_reb_del)
+		QApplication.restoreOverrideCursor()
 
 	def on_change_cbx_port_starboard(self, state):
+		QApplication.setOverrideCursor(Qt.WaitCursor)
 		if self.dbb_prob is not None:
 			geo_add_reb_del = self._dbb_problem.set_portside_starboardside_visibility(
 				self.show_portside,self.show_starbside)
 			self.dbb_cmnd.send_signals(geo_add_reb_del)
+		QApplication.restoreOverrideCursor()
 
 
-	def on_change_cbx_decks(self,state):
+	def on_change_cbx_show_type(self,state):
+		QApplication.setOverrideCursor(Qt.WaitCursor)
+		geos = self.dbb_prob.get_all_visible_geometries()
+		DBBDeckPlate.show_deck_plate = self.show_deckplate
+		DBBDeckHull.show_deck_hull = self.show_deckhull
+		DBBSegment.show_segments = self.show_dbbsegm
+		DBBCompartment.show_compartments = self.show_dbbcomp
+		geo_add_reb_del =self.dbb_prob.get_changes_to_previous_state(geos)
+		self.dbb_cmnd.send_signals(geo_add_reb_del)
+		QApplication.restoreOverrideCursor()
+
+	def on_change_cbx_deck_plate(self,state):
 		if self.dbb_prob is not None:
 			if state == Qt.Checked:
 				pass
@@ -410,29 +413,21 @@ class ModelControlDock(QDockWidget):
 				pass
 
 	def _handle_tree_ItemChanged(self, item:QTreeWidgetItem, column):
+		QApplication.setOverrideCursor(Qt.WaitCursor)
+		# do lengthy process
 		if isinstance(item,QTreeWidgetGeometryItem):
 			do_show = (item.checkState(column) == Qt.Checked)
 			geo:DBBBaseAll = item.geometry
 			old_state = geo.show
-			if isinstance(geo,DBBDeckUnitBase):
-				if isinstance(geo,DBBDeckPlate):
-					geo.set_show(do_show and self.show_deckplate)
-				elif isinstance(geo,DBBDeckHull):
-					geo.set_show(do_show and self.show_deckhull)
-				elif isinstance(geo,DBBSegment):
-					geo.set_show(do_show and self.show_dbbsegm)
-				elif isinstance(geo,DBBCompartment):
-					geo.set_show(do_show and self.show_dbbcomp)
-				#send signals
-				if do_show and (not old_state):
-					Signals.get().geometryAdded.emit(geo)
-				elif (not do_show) and old_state:
-					Signals.get().geometryRemoved.emit(geo)
-			else:
-				if do_show:
-					Signals.get().geometryAdded.emit(geo)
-				else:
-					Signals.get().geometryRemoved.emit(geo)
+			if isinstance(geo,DBBBaseAll):
+				before =geo.show
+				geo.set_show(do_show)
+				if before != geo.show:
+					if geo.show:
+						Signals.get().geometryImported.emit(geo)
+					else:
+						Signals.get().geometryRemoved.emit(geo)
+		QApplication.restoreOverrideCursor()
 
 	def _populate_treeveiew(self,tree:QTreeWidget,dbbproblem:DBBProblem_new):
 		tree.clear()
@@ -447,10 +442,12 @@ class ModelControlDock(QDockWidget):
 			node_0 = QTreeWidgetItem(tree)
 			node_0.setFlags(node_0.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 			node_0.setText(0, "Deck {}".format(deck.id))
+			node_0.setCheckState(0, Qt.Checked)
 			#
 			node_1 = QTreeWidgetItem(node_0)
 			node_1.setFlags(node_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 			node_1.setText(0, "Hull & Plate {}".format(deck.id))
+			node_1.setCheckState(0, Qt.Checked)
 			#
 			#Plate
 			child = QTreeWidgetGeometryItem(node_1,deck.plate)
@@ -466,10 +463,12 @@ class ModelControlDock(QDockWidget):
 			node_1 = QTreeWidgetItem(node_0)
 			node_1.setFlags(node_1.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 			node_1.setText(0, "Segments {}".format(deck.id))
+			node_1.setCheckState(0, Qt.Checked)
 			for segment in deck.segments:
 				node_2 = QTreeWidgetGeometryItem(node_1, segment)
 				node_2.setFlags(node_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 				node_2.setText(0, "Segment {}".format(segment.id))
+				node_2.setCheckState(0, Qt.Checked)
 				for comp in segment.compartments:
 					child = QTreeWidgetGeometryItem(node_2, comp)
 					child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
