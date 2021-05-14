@@ -154,9 +154,9 @@ class DBBBaseAll(ExtendedGeometry):
 		lbs = [0.0]
 		i_test_dims = [1]
 		tol = 0.0
-		if not self._do_portside:
-			self.mesh = DBBBaseAll.cut_mesh_with_plane(self.mesh, -1, False, i_test_dims, tol, lbs)
 		if not self._do_starbside:
+			self.mesh = DBBBaseAll.cut_mesh_with_plane(self.mesh, -1, False, i_test_dims, tol, lbs)
+		if not self._do_portside:
 			self.mesh = DBBBaseAll.cut_mesh_with_plane(self.mesh, -1, True, i_test_dims, tol, lbs)
 
 	def move(self, move_vector):
