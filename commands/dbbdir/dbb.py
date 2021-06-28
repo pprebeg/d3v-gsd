@@ -336,7 +336,7 @@ class DBBBase(DBBBaseAll):
 
 	def regenerateMesh(self):
 		self._genMesh()
-		self._cutMesh(self.deck_hull.mesh)
+		#self._cutMesh(self.deck_hull.mesh)
 		if self.is_closed():
 			self._volume = self.calc_volume()
 		else:

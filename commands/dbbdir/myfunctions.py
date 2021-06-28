@@ -58,84 +58,6 @@ Result (3d array):  15 x 3 x 5
 class CustomError(Exception):
 	pass
 
-#pp je da su suprotne tocke na quadu udaljene za 2 u arrayu	
-def quadinter(quads):		#quad je n x 4 x 3 array
-	#print(quads)
-	bool_same_points = (quads.reshape(-1,1,4,1,3) == quads.reshape(1,-1,1,4,3)).all(-1).any(2)	# where atleast 1 point is same 
-	#clean diag:
-	a = np.arange(bool_same_points.shape[0])
-	diag_indices = (a,a)
-	bool_same_points[diag_indices] = False
-	# i_row_atleast1 = np.where(bool_same_points.any(-1))   #[0]sa kojim quadovima se sijece ,[1] kojem quadu pripada tocka koja se sijece
-	# i_point = np.argmax(bool_same_points[i_row_atleast1], 1)
-	# i_opposite_point = (i_point + 2)%4		#suprotni je za 2 indeksa udaljen
-	# print(quads, i_row_atleast1, i_opposite_point)
-	#print(quads)
-	
-	#make and clean diagonal bool matrix:
-	bool_array = bool_same_points.any(-1)
-	#bool_array = bool_array*np.triu(bool_array)		#remove lower tri duplicates, not upper for easier indexing		#if triu the last instance of duplicate array will be removed
-	bool_array = np.triu(bool_array)
-	i_row1 = np.where(bool_array)   #[1]sa kojim quadovima se sijece ,[0] kojem quadu pripada tocka koja se sijece
-	i_row2 = tuple(np.roll(np.asarray(i_row1), 1, 0))  #roll moves elements
-	i_point1 = np.argmax(bool_same_points[i_row1], 1)
-	i_point2 = np.argmax(bool_same_points[i_row2], 1)
-	i_op1 = (i_point1 + 2)%4		#suprotni je za 2 indeksa udaljen
-	i_op2 = (i_point2 + 2)%4		#suprotni je za 2 indeksa udaljen
-	#sets of quads on same indexes
-	q1 = quads[i_row1[1]]
-	q2 = quads[i_row2[1]]
-	#pairs of opposite points of quads on same indexes:
-	op1 = q2[(np.arange(q2.shape[0]), i_op2)]
-	op2 = q1[(np.arange(q1.shape[0]), i_op1)]
-	bool = (is_in_quad(q1,op1, True) | is_in_quad(q2,op2, True)).flatten()
-	#return indices of intersecting quads:
-	return np.asarray(i_row1).T[bool]
-	
-	# print(is_in_quad(q1,op1, True))
-	# print(is_in_quad(q2,op2, True))
-	
-	# print(bool_same_points)
-	# print(bool_same_points[i_row1])
-	# print(i_row1,i_row2)
-	# print(i_op1,i_op2)
-	
-	#i_row2 = 
-	# i_point = np.argmax(bool_same_points[i_row_atleast1], 1)
-	# i_opposite_point = (i_point + 2)%4		#suprotni je za 2 indeksa udaljen
-	
-	
-#	opposite_points = quads[(i_row_atleast1[1], i_opposite_point)]
-#	quads_with_intersections = quads[(i_row_atleast1[0],)]
-	#print(quads_with_intersections, opposite_points)
-	# print("quads:\n" + str(quads_with_intersections))
-	# print("points:\n" + str(opposite_points))
-#	bool = is_in_quad(quads_with_intersections, opposite_points, True)
-#	print(bool.flatten())   remove duplicates
-	#print(is_in_quad(quads_with_intersections, opposite_points, True))
-	
-	
-	# bool_atleast1 = bool_same_points.any(-1)
-	# bool_atleast1 = bool_atleast1*np.triu(bool_atleast1)		#remove lower tri duplicates, not upper for easier indexing		#if triu the last instance of duplicate array will be removed
-	# diag_indices = np.diag_indices(bool_atleast1.shape[0])
-	# bool_atleast1[diag_indices] = False
-	# i_atleast1 = np.where(bool_atleast1)
-	# i_point = np.argmax(bool_same_points[i_atleast1], 1)
-	# i_opposite_point = (i_point + 2) % 4
-	#i1 = np.append(np.expand_dims(i_atleast1[0],0), ,0)
-	
-	#opposite_points = quads[i]
-	
-	
-	#print(bool_same_points)
-	
-def is_in_quad(quads, p, pair_mode = False):
-	tri1 = np.delete(quads, 2, 1)
-	tri2 = np.delete(quads, 0, 1)
-	bool1 = is_in_tri2(tri1, p, pair_mode)
-	bool2 = is_in_tri2(tri2, p, pair_mode)
-	
-	return bool1 | bool2
 
 #http://geomalgorithms.com/a06-_intersect-2.html
 #line_plane-inter with kombination broadcasting
@@ -258,61 +180,6 @@ def vadjdims(arr,x,pos = 1):
 	return arr
 	
 	
-# def is_in_tri2(fp, p, pair_mode = False):		#rezultat je bool array; axis 0 su pointovi, a axis 1 su trokuti, npr [2][0] je lezi li point 2 u trokutu 0, no ako je pair mode True; racunati ce trokute i pointove na istim indeksima  
-	# if pair_mode == False:
-		# v0 = fp[:,0,:]
-		# u = fp[:,1,:] - v0 
-		# v = fp[:,2,:] - v0 
-		
-		# w = vadjdims(p, v0) - vclone(v0, p)
-		
-		# uu = (u**2).sum(1)
-		# vv = (v**2).sum(1)
-		# uv = (u*v).sum(1)
-		# wu = (w*u).sum(2)
-		# wv = (w*v).sum(2)
-		
-		# d = uv**2 - uu * vv		#denominator
-		# si = (uv*wv - vv*wu) / d
-		# ti = (uv*wu - uu*wv) / d
-		# siti = si+ti
-		# mintol = -0.00001								#povecaj tol ako treba? 
-		# maxtol = 1.00001
-		# stavi errstate za supressanje nezeljenih warninga
-		# with np.errstate(invalid = "ignore"):		#removes warnings of runtime errors encountering nan-s witch works as intended
-			# return (si != np.nan) & (ti != np.nan)& (siti != np.nan) & (mintol < si) & (si < maxtol) & (mintol < ti) & (ti < maxtol) & (siti <= maxtol)
-
-		# warnings.filterwarnings('ignore')
-	# elif pair_mode == True:
-		# if fp.shape[0] != p.shape[0]:
-			# raise CustomError("For pair mode triangle points array and points array must have same shape[0]")
-	
-		
-		# v0 = fp[:,0,:]
-		# u = fp[:,1,:] - v0 
-		# v = fp[:,2,:] - v0 
-		
-		# w = p - v0
-		
-		# uu = (u**2).sum(-1)
-		# vv = (v**2).sum(-1)
-		# uv = (u*v).sum(-1)
-		# wu = (w*u).sum(-1)
-		# wv = (w*v).sum(-1)		
-
-		# d = uv**2 - uu * vv		#denominator
-		# si = (uv*wv - vv*wu) / d
-		# ti = (uv*wu - uu*wv) / d
-		# siti = si+ti
-		# mintol = -0.00001								#povecaj tol ako treba? 
-		# maxtol = 1.00001
-		# stavi errstate za supressanje nezeljenih warninga
-		# with np.errstate(invalid = "ignore"):		#removes warnings of runtime errors encountering nan-s witch works as intended
-			# return (si != np.nan) & (ti != np.nan)& (siti != np.nan) & (mintol < si) & (si < maxtol) & (mintol < ti) & (ti < maxtol) & (siti <= maxtol)
-		
-		
-		# print(w)
-	
 def is_in_tri2(fp, p, pair_mode = False):		#rezultat je bool array; axis 0 su pointovi, a axis 1 su trokuti, npr [2][0] je lezi li point 2 u trokutu 0, no ako je pair mode True; racunati ce trokute i pointove na istim indeksima  
 	v0 = fp[:,0,:]
 	u = fp[:,1,:] - v0 
@@ -349,15 +216,87 @@ def is_in_tri2(fp, p, pair_mode = False):		#rezultat je bool array; axis 0 su po
 		bool[dist != 0] = False
 		return bool
 		
+		# warnings.filterwarnings('ignore')
+#racuna jesu li tocke blizu trokuta (dist tocke od ravnine mora biti ispod dist_tol i mora biti unutar prizme koje r)
+#provijerava samo sa pozitivne strane lica
+def is_in_triangular_prism2(fp, p, dist = None, dist_tol = 0.1, pair_mode = False):		#rezultat je bool array; axis 0 su pointovi, a axis 1 su trokuti, npr [2][0] je lezi li point 2 u trokutu 0, no ako je pair mode True; racunati ce trokute i pointove na istim indeksima  
+	v0 = fp[:,0,:]
+	u = fp[:,1,:] - v0 
+	v = fp[:,2,:] - v0 
+	
+	#project points onto plane for further calculation:
+	triangle_normals = np.cross(u,v)
+	triangle_normals = triangle_normals/np.expand_dims(((triangle_normals**2).sum(-1))**0.5, 0).T
+	
+	if dist is None:
+		dist = dist_p_plane2(p, fp, pair_mode)
+
+	# print(triangle_normals)
+	# print(dist)
+	
+	if pair_mode == False:
+		pp = np.expand_dims(p,1) - np.expand_dims(dist,-1)*np.expand_dims(triangle_normals, 0)			#pp is projected points onto each face
+		w = vadjdims(pp, v0) - vclone(v0, pp)
+		
+	elif pair_mode == True:
+		if fp.shape[0] != p.shape[0]:		#if pairs do not have matching shapes
+			raise CustomError("For pair mode triangle points array and points array must have same shape[0]!")
+		pp = p - dist.T*triangle_normals
+		w = pp - v0
+	
+	uu = (u**2).sum(-1)
+	vv = (v**2).sum(-1)
+	uv = (u*v).sum(-1)
+	wu = (w*u).sum(-1)
+	wv = (w*v).sum(-1)
+	
+	d = uv**2 - uu * vv		#denominator
+	si = (uv*wv - vv*wu) / d
+	ti = (uv*wu - uu*wv) / d
+	siti = si+ti
+	mintol = -0.01								#povecaj tol ako treba? 
+	maxtol = 1.01
+	# stavi errstate za supressanje nezeljenih warninga
+	with np.errstate(invalid = "ignore"):		#removes warnings of runtime errors encountering nan-s witch works as intended
+		bool = (si != np.nan) & (ti != np.nan) & (siti != np.nan) & (mintol < si) & (si < maxtol) & (mintol < ti) & (ti < maxtol) & (siti <= maxtol)	#provijera jeli projekcija po normali unutar trokuta
+		# print(pp)
+		# print(dist_p_plane2(pp, fp, pair_mode))
+		# print(bool)
+		# print(dist <= dist_tol, dist <= -1e-08)
+		# dist_bool = (dist <= dist_tol) & (dist <= -1e-08)			#provijera jeli na dozvoljenoj visini prizme
+		dist_bool = (np.abs(dist) <= dist_tol)
+		#kada je pair mode bool ima 1 dim a dist ima 2 pa se nemoze indeksirat
+		if len(dist.shape) > len(bool.shape):
+			bool = np.expand_dims(bool, 0)
+		# print(dist)
+		# print(dist_bool)
+		return_bool = bool & dist_bool
+		i = np.where(return_bool)
+		# print(i)
+		# print(return_bool)
+		# print(np.where(return_bool))
+		point_indices = tuple(i[0])				
+		return_fh_dict = dict(zip(point_indices, [[np.empty(0, dtype = "int64")] for _ in range(len(point_indices))]))		#dict for every fh with empty array(0,3)
+		return_dist_dict = dict(zip(point_indices, [[np.empty(0)] for _ in range(len(point_indices))]))		#dict for every fh with empty array(0,3)
+		
+		# print(return_dict)
+		# print(tuple(np.asarray(i).T))
+		for pair in tuple(np.asarray(i).T):
+			# print(pair)
+			# print(dist[pair[0], pair[1]])
+			return_fh_dict[pair[0]] = np.append(return_fh_dict[pair[0]], pair[1])
+			# print(return_dict[2][1])
+			return_dist_dict[pair[0]] = np.append(return_dist_dict[pair[0]], dist[pair[0], pair[1]])
+		# print(return_dict)
+		# print(dist[i])
+		# print(return_fh_dict, return_dist_dict)
+		return (return_fh_dict, return_dist_dict)
+		
 		
 		# warnings.filterwarnings('ignore')
-
-
-
-	
-	
-	
-	
+		
+		
+		
 #http://geomalgorithms.com/a06-_intersect-2.html			
 def tri_plane_inter2(tp, pp):  #po starom ili da samo lupim line_plane inter?
 	d = dist_tri_p_plane2(tp, pp)
@@ -739,294 +678,6 @@ def sort_by_dist2(points, sort_by_min_dist = True):			#start point is points[0],
 			
 	return points[np.asarray(sorted_indices)]
 
-
-
-#----------------------------------------
-#intersection algorithm table
-#http://www.realtimerendering.com/intersections.html
-
-
-def is_in_tri(p, v0, u, v): #u, v triangle plane vectors from v0, p is point to test #works only if in same plane
-		#plane_points = np.array([v0, v0+u, v0+v])
-		#if np.isclose(dist_p_plane(p, plane_points),0):	#point must be on plane
-		w = p - v0 
-		uu = np.dot(u,u)
-		vv = np.dot(v,v)
-		uv = np.dot(u,v)
-		wu = np.dot(w,u) 
-		wv = np.dot(w,v)
-		denominator = uv**2 - uu * vv
-		si = (uv*wv - vv*wu) / denominator
-		#print(si)
-		
-		mintol = -0.00001								#povecaj tol ako treba? 
-		maxtol = 1.00001
-		if si < mintol or si > maxtol:			#jos ubrzat sa 1.000000001 uvijetom?
-			return False
-		ti = (uv*wu - uu*wv) / denominator
-		#print(ti)
-		if ti < mintol or (si+ti) > maxtol:
-			return False
-		return True
-
-		
-		#if (si < 0.0 and np.isclose(si,0.0) == False) or (si > 1.0 and np.isclose(si, 1.0) == False):			#jos ubrzat sa 1.000000001 uvijetom?
-		#	return False
-		#ti = (uv*wu - uu*wv) / denominator
-		##print(ti)
-		#if (ti < 0.0 and np.isclose(ti,0.0) == False) or ((si+ti) > 1.0 and np.isclose((si+ti),1.0) == False):
-		#	return False
-		#return True
-	#else:
-		#	return False
-			
-#http://geomalgorithms.com/a05-_intersect-1.html			
-def line_line_inter(l1, l2):			#general intersection; returns touple with parameters for l2 equation to get l1 points, and in case of only 1 intersection; that point
-	u = l1[1] - l1[0]
-	v = l2[1] - l2[0]
-	#i = np.where(v != 0)[0][0] 		#index where denominator v is not 0 to avoid error   if both u and v [i] are 0 paralel check will be True regardless of other indexes           
-	#if np.all((u[i]*v - u*v[i]) == 0.0):					#paralell check
-	if np.all((u[0]*v - u*v[0]) == 0.0):					#paralell check
-		w = l1[0] - l2[0]
-		if np.all(w[0]*v - w*v[0] == 0.0):				#coincidance check
-			z = l1[1] - l2[0]
-			i = np.where(v != 0)[0][0]		#premijesteno
-			t0 = w[i]/v[i]				#sto ako je v 0? index np where v =! 0?
-			t1 = z[i]/v[i]
-			return (t0, t1)
-		else:
-			return (None)
-	else:				#lines are not paralell
-		for i in range(u.shape[0]):		#find non paralel projection of rd
-			up = np.delete(u, i)	#remove i coordinate
-			vp = np.delete(v, i)
-			if np.any((up[0]*vp - up*vp[0]) != 0.0):	#if rd projections are not paralel
-				index = i
-				break
-		else:	#ako su svi paralelni?
-			return (None)
-		
-		w = l1[0] - l2[0]		#P0 - Q0
-		wp = np.delete(w, index)
-		denominator = up[0] * vp[1] - up[1] * vp[0]
-		sI = -(vp[1]*wp[0] - vp[0]*wp[1]) / denominator		#za l1
-		tI = (up[0]*wp[1] - up[1]*wp[0]) / denominator 		#za l2
-		Pi1 = l1[0] + sI * u
-		Pi2 = l2[0] + tI * v
-		if np.allclose(Pi1, Pi2):
-			return (sI, tI, Pi1)
-		else:
-			return (None)
-	
-def segment_inter(s1,s2): #segments are paralel and colinear
-	line_vector = s1[1] - s1[0]
-	i = np.where(line_vector != 0)[0][0] #coordinate index where both segments are not 0
-	
-	s1min = np.min(s1[:,i])
-	s1max = np.max(s1[:,i])
-	s2min = np.min(s2[:,i])
-	s2max = np.max(s2[:,i])
-	
-	
-	if (s1min <= s2min <= s1max) or (s1min <= s2max <= s1max) or (s2min <= s1min <= s2max) or (s2min <= s1max <= s2max):
-		u = np.append(s1, s2, 0) #unity array
-		mini = np.where(u[:,i] == np.min(u[:,i]) )[0][0] #first row index with min valid value
-		maxi = np.where(u[:,i] == np.max(u[:,i]) )[0][0] #first row index with max valid value
-		return np.delete(u, (mini, maxi), 0)  #return unity with max and min points deleted
-	else:
-		return None
-	
-	
-def do_segments_cross(l1,l2):	#assume they are in same plane and are not paralel
-	u = l1[1] - l1[0]
-	v = l2[1] - l2[0]
-	for i in range(u.shape[0]):		#find non paralel projection of rd
-		up = np.delete(u, i)	#remove i coordinate
-		vp = np.delete(v, i)
-		if np.any((up[0]*vp - up*vp[0]) != 0.0):	#if rd projections are not paralel
-			index = i
-			break
-	else:
-		return False			#added, check if ok later
-	
-	w = l1[0] - l2[0]		#P0 - Q0
-	wp = np.delete(w, index)
-	denominator = up[0] * vp[1] - up[1] * vp[0]
-	sI = -(vp[1]*wp[0] - vp[0]*wp[1]) / denominator		#za l1
-	tI = (up[0]*wp[1] - up[1]*wp[0]) / denominator 		#za l2
-	Pi1 = l1[0] + sI * u
-	Pi2 = l2[0] + tI * v
-	#print(Pi1, Pi2, sI, tI)
-	if np.allclose(Pi1, Pi2) and 0 <= sI <= 1 and 0 <= tI <= 1:
-		return True
-	else:
-		return False
-
-	
-	
-	
-#http://geomalgorithms.com/a04-_planes.html#Distance-Point-to-Plane
-def dist_p_plane(p, plane_points):
-	u = plane_points[1] - plane_points[0]
-	v = plane_points[2] - plane_points[0]
-	v0 = plane_points[0]
-	n = np.cross(u,v)
-	d = -np.dot(n, v0)		
-	dn = np.sum(n**2)**0.5	
-	return (np.sum(n*p)+d) / dn	
-
-def is_p_outside_face(p, face_points):	#p is outisde if is on + side of normal, inside if on face or - side of normal
-	if dist_p_plane(p, face_points) > 0.0:
-		return True
-	else:
-		return False
-	
-	
-#http://geomalgorithms.com/a06-_intersect-2.html
-def line_plane_inter(ro,rd, plane_points): #ro line segment start, r1 line segment end, v0 plane origin point
-	u = plane_points[1] - plane_points[0]
-	v = plane_points[2] - plane_points[0]
-	n = np.cross(u,v)
-	if np.all(n == 0.0):	#degenerate triangle
-		return(None,)
-	a = np.dot(n,(plane_points[0] - ro))
-	if np.isclose(a, 0.0):	#if ro is on plane
-		return (ro, 0.0 ,u ,v)	#intersection is ray origin and t = 0
-	
-	denominator = np.dot(n,rd)
-	if np.isclose(denominator, 0.0):	#if True, Ray is paralel to plane and on plane condition was checked
-		return (None,)
-	t = a / denominator		#ray and plane are not paralel
-	pi = ro + rd*t
-	return (pi, t ,u ,v)
-		#if return is inf line and plane are paralel if return >= 1 intersection is outside segment 
-
-#http://geomalgorithms.com/a06-_intersect-2.html
-def line_tri_inter(ro, rd, triangle_points): 				#ro = ray origin, rd = ray direction
-	inter_data = line_plane_inter(ro,rd, triangle_points)
-	if inter_data[0] is not None:	#intersection with tri plane exists
-		pi = inter_data[0]									#intersection point
-		t = inter_data[1]
-		u = inter_data[2]
-		v = inter_data[3]
-		#old_con = is_inside_triangle(pi, triangle_points)
-		new_con = is_in_tri(pi, triangle_points[0], u, v)
-		#if is_inside_triangle(pi, triangle_points):
-		#if is_in_tri(pi, triangle_points[0], u, v):		#AKO ZAMIJENIM SA STARIM DOBRO FUNKCIONIRA?
-		#if old_con != new_con:
-		#	print("\nerror at point: " + str(ro))
-		#	print("\nerror at direction: " + str(rd))
-		#	print("error at tri_points: " + str(triangle_points))
-		if new_con:
-			return (pi, t)
-		else:
-			return (None,)
-	else:
-		return (None,)
-
-
-#http://geomalgorithms.com/a06-_intersect-2.html			
-def tri_plane_inter(plane_points, triangle_points):
-	in_p = np.empty((0,3))
-	out_p = np.empty((0,3))
-	on_p = np.empty((0,3))			#dodaj uvijet paralenosti?
-	for p in triangle_points:			#ako je sporo probaj tolist()
-		dist = dist_p_plane(p, plane_points)
-		if dist > 0.0:
-			out_p = np.append(out_p, np.expand_dims(p,0),0)
-		elif dist < 0.0:
-			in_p = np.append(in_p, np.expand_dims(p,0),0)
-		elif dist == 0.0:
-			on_p = np.append(on_p, np.expand_dims(p,0),0)
-		#else: #if triangle is degenerate: add cross product = 0 outside 
-		#	return (None)
-		
-	inlen = in_p.shape[0]
-	outlen = out_p.shape[0]
-	onlen = on_p.shape[0]
-	
-	if inlen == 3 or outlen == 3 or onlen == 3:	#all points are on one side of plane	#dodaj uvijet paralenosti?
-		return (None)
-	
-	elif onlen == 2 and (inlen == 1 or outlen == 1):
-		return (on_p)
-	
-	elif inlen == 2 and outlen == 1 :														#all points are not on one side and all points are not on plane
-		inter = np.empty((0,3))
-		v = in_p - out_p #vector array	#out_p is just one point
-		for rd in list(v):
-			i = line_plane_inter(out_p[0],rd,plane_points)[0]
-			inter = np.append(inter, np.expand_dims(i,0),0) 
-		return (inter)
-		
-	elif inlen == 1 and outlen == 2:
-		inter = np.empty((0,3))
-		v = out_p - in_p #vector array	#in_p is just one point
-		for rd in list(v):
-			i = line_plane_inter(in_p[0],rd,plane_points)[0]
-			inter = np.append(inter, np.expand_dims(i,0),0)  
-		return (inter)
-
-	elif inlen == 1 and outlen == 1 and onlen == 1:
-		inter = on_p
-		rd = (out_p - in_p)[0]
-		i = line_plane_inter(in_p[0],rd,plane_points)[0]
-		inter = np.append(inter, np.expand_dims(i,0),0)
-		return (inter)
-		
-	elif onlen == 1 and (inlen == 2 or outlen == 2):		#if 1 or 2 points are on plane and other points are all on one side
-		#return on_p unneeded for face cut algorithm
-		return (None)
-	
-	
-	else:
-		return(None)
-
-#http://geomalgorithms.com/a06-_intersect-2.html		
-def tri_tri_inter(tri1, tri2):	#tri1 is block triangle!
-	s1 = tri_plane_inter(tri1, tri2)
-	s2 = tri_plane_inter(tri2, tri1)
-	if s1 is not None and s2 is not None and s1.shape[0] == 2 and s2.shape[0] == 2:		#triangles can intersect with plane in only 1 point and 3 points, in those cases return None, because this algorithm is for face cutting and only 1 or 3 intersections are not needed 
-		segment = segment_inter(s1,s2)		#data1[1] is block face inside points #face that is to be cut
-		#print("yoyo: " + str(segment)+ str("\n"))
-		if (segment is None) or np.allclose(segment[0], segment[1]):		#ako se trokuti sijeku u samo 1 tocki trokut nam ne treba
-			return None
-		else:
-			return segment
-	else:
-		return None
-
-def get_neigbour_faces(fh_idx_list, mesh_ffi, n = 2): 		#rewrite sa setom		# ima problem sa dodavanjem nepovezanih faceva, neznam jeli to do pogreske u formi, novi uvijet sa is_boundary? 
-	#return_list = copy.copy(fh_idx_list)
-	#delta_fh_idx = copy.copy(fh_idx_list) #provjeravaj samo za addane	
-	
-	#for x in range(n):
-	#	memory = []
-	#	for fh_idx in delta_fh_idx:
-	#		near_idx_list = mesh_ffi[fh_idx]
-	#		try:
-	#			near_idx_list.remove(-1)
-	#		except:
-	#			pass
-	#		for idx in near_idx_list:
-	#			if idx not in return_list:
-	#				return_list.append(idx)
-	#				memory.append(idx)
-	#	delta_fh_idx = copy.copy(memory)
-	
-	
-	fh_set = set(fh_idx_list)
-	for x in range(n):
-		new_fh = set()
-		for fh_idx in fh_set:
-			delta = mesh_ffi[fh_idx]
-			try:
-				delta.remove(-1)
-			except:
-				pass
-			new_fh.update(delta)
-		fh_set.update(new_fh)
-	return list(fh_set)
 	
 def get_neigbour_faces2(fh_idx_array, mesh,block_dims, block_position ,n = 2):
 	mesh_ffi = mesh.face_face_indices()
@@ -1049,58 +700,89 @@ def get_neigbour_faces2(fh_idx_array, mesh,block_dims, block_position ,n = 2):
 	# print(fh_idx_array[~bad_fh_idx])
 	
 	return fh_idx_array[~bad_fh_idx]
-	
-	
-	
-	
-def get_faces_near_block(block_mesh, form_mesh, block_dims, block_position):  #n => algorithm repeat n times
-	#1) koji facevi su blizu blocka
-	form_mesh_vfi = form_mesh.vertex_face_indices().tolist()
-	form_mesh_points = form_mesh.points().tolist()
-	xmin = block_position[0] 
-	xmax = block_position[0] + block_dims[0]
-	ymin = block_position[1] 
-	ymax = block_position[1] + block_dims[1]
-	zmin = block_position[2]
-	zmax = block_position[2] + block_dims[2]
-	
-	near_fh_idx_list = []
-	form_inside_points = np.empty((0,3))
-	
-	#trazi fh_idx od svih faceva koji imaju tocku u projekciji sa blokm na xz ravninu
-	for vh_idx in range(len(form_mesh_points)):
-		point = form_mesh_points[vh_idx]
-		if (xmin <= point[0] <= xmax) and (ymin <= point[1] <= ymax) and (zmin <= point[2] <= zmax): #ako je point izmedju projekcije
-			near_fh_idx_list += form_mesh_vfi[vh_idx] 
-			form_inside_points = np.append(form_inside_points, np.expand_dims(point,0), 0)
-			
-	#micanje duplikata i -1 u listi
-	near_fh_idx_list = set(near_fh_idx_list)
-	near_fh_idx_list = list(near_fh_idx_list)
-	try:
-		near_fh_idx_list.remove(-1)
-	except:
-		pass
 
-	return (near_fh_idx_list, form_inside_points)
-
-def get_faces_near_block2(block_mesh, form_mesh, block_dims, block_position):
+	
+def stitch_face2(points, original_normal): 		#[0 and following are inside points, if there are any]
+	data = sort_by_angle(points, original_normal, True)
+	points = np.append(np.expand_dims(data[1],0),data[0],0)		#insert centroid at 0
+	n_points = points.shape[0]
+	n_faces = n_points - 2
+	a = (np.full(n_faces, 0)).reshape(-1,1)
+	c = (np.arange(n_faces) + 1).reshape(-1,1)
+	b = c + 1
+	fvi = np.concatenate((a,c,b), axis = 1)
+	fvi = np.append(fvi, np.expand_dims(np.array([0,(n_points-1),1]),0),0)
+	# print(fvi)
+	# points = np.append(np.expand_dims(centroid,0),points,0)
+	# mesh_points = points[fvi]
+	# normals = np.cross(mesh_points[:,1] - mesh_points[:,0], mesh_points[:,2] - mesh_points[:,0])
+	# bool_normals_zero = np.isclose(normals, 0).all(-1)
+	# if bool_normals_zero.any():
+		# print(bool_normals_zero)
+	
+	
+	
+	return om.TriMesh(points, fvi)
+	
+	
+	
+def get_faces_near_block2(block_mesh, form_mesh, block_dims, block_position, form_mesh_avg_edge = None):
 	form_mesh_vfi = form_mesh.vertex_face_indices()
+	form_mesh_fvi = form_mesh.face_vertex_indices()
 	form_mesh_points = form_mesh.points()
+	form_mesh_tpoints = form_mesh_points[form_mesh_fvi]
+	if form_mesh_avg_edge is None:
+		form_mesh_edges = form_mesh_points[form_mesh.edge_vertex_indices()]
+		form_mesh_edges = ((form_mesh_edges[:,1] - form_mesh_edges[:,0])**2).sum(-1)**0.5
+		form_mesh_avg_edge = form_mesh_edges.sum()/form_mesh_edges.shape[0]*0.75		#inace je *1.5 ali sam podjielio sa dva jer kada radimo += da nema jos jednu operaciju
+	# print(form_mesh_avg_edge)
 	xmin = block_position[0] 
 	xmax = block_position[0] + block_dims[0]
 	ymin = block_position[1] 
 	ymax = block_position[1] + block_dims[1]
 	zmin = block_position[2]
 	zmax = block_position[2] + block_dims[2]
+	
+	#get actual_inside_vh_idx
+	bool = (((xmin <= form_mesh_points[:,0]) & (form_mesh_points[:,0] <= xmax)) & ((ymin <= form_mesh_points[:,1]) & (form_mesh_points[:,1] <= ymax)) & ((zmin <= form_mesh_points[:,2]) & (form_mesh_points[:,2] <= zmax)))
+	form_actual_inside_vh_idx = np.where(bool)[0]		#[0] because return tuple
+	
+	xmin -= form_mesh_avg_edge 
+	xmax += form_mesh_avg_edge
+	ymin -= form_mesh_avg_edge 
+	ymax += form_mesh_avg_edge
 	
 	bool = (((xmin <= form_mesh_points[:,0]) & (form_mesh_points[:,0] <= xmax)) & ((ymin <= form_mesh_points[:,1]) & (form_mesh_points[:,1] <= ymax)) & ((zmin <= form_mesh_points[:,2]) & (form_mesh_points[:,2] <= zmax)))
-	form_inside_vh_idx = np.where(bool)[0]		#[0] because return tuple
+	form_quazi_inside_vh_idx = np.where(bool)[0]		#[0] because return tuple
 	
-	form_inside_fh_idx = form_mesh_vfi[form_inside_vh_idx].flatten()
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	# xboolout = (form_mesh_tpoints > np.array([xmax, np.nan, np.nan])).any((-1,-2)) & (form_mesh_tpoints < np.array([xmin, np.nan, np.nan])).any((-1,-2))	#witch triangle fh have atleast 1 point outside of block on both sides on x axis
+	# xboolin = ~xboolout
+	# print(bool_xmax)			#mijenja dimenzije kak nisam predvidio
+	# bool_ymax = (form_mesh_tpoints[:,:,1] > ymax).any(-1)
+	# bool_ymin = (form_mesh_tpoints[:,:,1] < ymin).any(-1)
+	# ybool = bool_ymax & bool_ymin
+	# yboolout = (form_mesh_tpoints > np.array([np.nan, ymax, np.nan])).any((-1,-2)) & (form_mesh_tpoints < np.array([np.nan, ymin, np.nan])).any((-1,-2))	#witch triangle fh have atleast 1 point outside of block on both sides on x axis
+	# yboolin = ~yboolout
+	# in_fh = np.where((xboolout & yboolout) | (xboolout & yboolin) | (xboolin & yboolout))[0]
+	# print(np.unique(in_fh))
+	# bool_zmax = (form_mesh_tpoints[:,2] > zmax).any(-1)
+	# bool_zmin = (form_mesh_tpoints[:,2] < zmin).any(-1)
+	# zbool = bool_zmax & bool_zmin
+
+	
+	form_inside_fh_idx = form_mesh_vfi[form_quazi_inside_vh_idx].flatten()
 	form_inside_fh_idx = np.unique(np.delete(form_inside_fh_idx, np.where(form_inside_fh_idx == -1)))	#clean -1 and remove duplicates
 	
-	return (form_inside_fh_idx, form_inside_vh_idx)
+	return (form_inside_fh_idx, form_actual_inside_vh_idx)
 	
 def sort_by_angle(points, original_normal, return_cenroid = False):		#all points are in same plane, not colinear,unique ,first point in points is the start with angle = 0 ,orig normal is normal of ogriginal face to witch it orients the points
 	# centroid = points.sum(0)/points.shape[0]
@@ -1145,56 +827,209 @@ def sort_by_angle(points, original_normal, return_cenroid = False):		#all points
 		return (points[np.append(np.array([0]), i)], centroid)
 	else:
 		return points[np.append(np.array([0]), i)]
-
-def are_all_points_colinear(points):
-	vectors = np.delete((points - points[0]),0, 0)		
-	cross_products = np.cross(np.delete(vectors,0,0), vectors[0])		#v1xv2,v1xv3,v1xv3.....
-	if np.isclose(cross_products, 0).all():
-		return True
-	else:
-		return False
 	
 	
-	
-def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
-	
+	#extract mesh parametriziraj!!
+	#problem kada je point blocka tocno na faceu forme
+	#tolerancijom se problem ne rijesava, ruse se ostali blockovi!
+	#trenutni problem je taj sto mi se facevi koji bi se trebali rezati, ne rezu
+	#rade se tocke na malim udaljenostima, pa ih unique_close2 brise kod stitcha i ostalih provijera za numericke greske
+	#moguce rjesenje je da se tocke koje su jako blizu forme izbace van 
+def cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = False):
+	# return block_mesh
+	#TREBA VEZAZI n, dist tol u prism2za parametre, i izvana izracunat L, B, avg_edge_len
+	# return block_mesh
 	# import matplotlib.pyplot as plt
 	# from mpl_toolkits.mplot3d import Axes3D
 	# fig = plt.figure()
 	# ax = fig.add_subplot(111, projection='3d')
 	
+	avg_block_dim = (((block_dims**2).sum(-1))**0.5)/2
+	
+	
+	form_mesh_edges = form_mesh.points()[form_mesh.edge_vertex_indices()]
+	form_mesh_edges = ((form_mesh_edges[:,1] - form_mesh_edges[:,0])**2).sum(-1)**0.5
+	form_mesh_avg_edge = form_mesh_edges.sum()/form_mesh_edges.shape[0]		#inace je *1.5 ali sam podjielio sa dva jer kada radimo += da nema jos jednu operaciju
 
 
 	#get form_inside_vh_idx and extract form segment:
-	form_data = get_faces_near_block2(block_mesh, form_mesh, block_dims, block_position)
+	form_data = get_faces_near_block2(block_mesh, form_mesh, block_dims, block_position, form_mesh_avg_edge = form_mesh_avg_edge*0.75)
 	if form_data[0].size == 0:
 		return block_mesh
 	form_fh_idx_to_check = get_neigbour_faces2(form_data[0], form_mesh,block_dims, block_position ,n = 2)
 	form_inside_vh_idx = form_data[1]
+	
+	
+	
+	
 	data1 = extract_mesh2(form_fh_idx_to_check, form_mesh, form_inside_vh_idx)		#duplikati u originalnoj formi!
 	# print(data1[1])
 	data2 = clean_mesh(data1[0], data1[1])
 	form_segment_mesh = data2[0]
 	form_segment_inside_vh_idx = data2[1]
 	
+	
+	
 	# print(form_segment_inside_vh_idx)
 	
 	#get block_inside_vh_idx:
 	block_points = block_mesh.points()
+	block_fvi = block_mesh.face_vertex_indices()
+	block_tpoints = block_points[block_fvi]
 	form_segment_fvi = form_segment_mesh.face_vertex_indices()
 	form_segment_points = form_segment_mesh.points()
-	block_inside_vh_idx = np.where((dist_p_plane2(block_points, form_segment_points[form_segment_fvi]) <= (0 + 1e-08)).all(-1))[0]
-	if block_inside_vh_idx.shape[0] == 8:	#if block is completely in 
-		return block_mesh
+	# form_segment_edges = form_segment_points[form_segment_mesh.edge_vertex_indices()]
+	# form_segment_edges = ((form_segment_edges[:,1] - form_segment_edges[:,0])**2).sum(-1)**0.5
+	# form_segment_avg_edge = form_segment_edges.sum()/form_segment_edges.shape[0]*0.75		#inace je *1.5 ali sam podjielio sa dva jer kada radimo += da nema jos jednu operaciju
+
+
 	
-	#precalc block and segment normals:
-	block_tpoints = block_points[block_mesh.face_vertex_indices()]
-	block_normals = np.cross(block_tpoints[:,1] - block_tpoints[:,0], block_tpoints[:,2] - block_tpoints[:,0])
-	block_normals = block_normals/((block_normals**2).sum(-1)**0.5).reshape(-1,1)
+	
+	
+	form_segment_tpoints = form_segment_points[form_segment_fvi]
+	block_points_form_segment_dist = dist_p_plane2(block_points, form_segment_tpoints)
+	block_inside_vh_idx = np.where((block_points_form_segment_dist <= 0.0).all(-1))[0]	
+	prism_data1 = is_in_triangular_prism2(form_segment_tpoints, block_points, dist_tol = avg_block_dim*0.1)		#  return (return_fh_dict, return_dist_dict)
+	prism_fh_dict1 = prism_data1[0]
+	prism_data2 = is_in_triangular_prism2(block_tpoints, form_segment_points, dist_tol = form_mesh_avg_edge*0.01)		#  return (return_fh_dict, return_dist_dict)
+	prism_fh_dict2 = prism_data2[0]
+	prism_dist_dict2 = prism_data2[1]
+	
+	bad_block_vh = np.asarray(tuple(prism_fh_dict1.keys()))
+	bad_form_vh = tuple(prism_fh_dict2.keys())
+	
+	# print(block_inside_vh_idx)
+	# print(np.array(prism_data[0].keys()))
+	# print(block_inside_vh_idx)
+	# print(block_vh_to_be_moved)
+	# print(block_points_form_segment_dist)
+
+	
+	
+	
+	# ljk = form_segment_mesh.points()[form_segment_inside_vh_idx]
+	
+	# ax.scatter(ljk[:,0],ljk[:,1],ljk[:,2], c = "purple")
 	
 	form_segment_tpoints = form_segment_points[form_segment_fvi] 
 	form_segment_normals = np.cross(form_segment_tpoints[:,1] - form_segment_tpoints[:,0], form_segment_tpoints[:,2] - form_segment_tpoints[:,0])
 	form_segment_normals = form_segment_normals/((form_segment_normals**2).sum(-1)**0.5).reshape(-1,1)
+	
+	# ax.scatter(block_points[[0,2,4,6]][:,0],block_points[[0,2,4,6]][:,1],block_points[[0,2,4,6]][:,2], c = "purple")
+	
+	if ((bad_block_vh.shape[0] > 0) or (len(bad_form_vh) > 0)) and rec == False:
+		# x+, x-, y+, y-
+		block_quad_vh_idx = np.array([[2,3,6,7],[0,1,4,5],[3,1,5,7],[0,2,4,6]], dtype = "int64")
+		block_quad_fh_idx = np.array([[[0],[1]],[[2],[3]],[[4],[5]],[[6],[7]]], dtype = "int64")
+		block_quad_normals = np.array([[1.0,0.0,0.0],[-1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,-1.0,0.0]])
+		block_form_segment_average_normals = dict()
+		block_quads_to_move_full = set()	#block sides to move alot when it intersects form	
+		bad_prism_fh = np.array([], dtype = "int64")
+		
+		
+		for bad_vh_idx in tuple(bad_form_vh):			#check where form segment points are very close to block
+			block_prism_fh = prism_fh_dict2[bad_vh_idx] 
+			block_prism_dist = prism_dist_dict2[bad_vh_idx]
+			i_n = np.where(np.abs(block_prism_dist) <= 0.001 )			
+			bad_prism_fh = np.append(bad_prism_fh, block_prism_fh[i_n], 0)
+			
+		block_quads_to_move_small = np.unique(np.where(np.equal(np.unique(bad_prism_fh), block_quad_fh_idx))[0])  #checks witch block tri faces belong to witch quad id  #block sides to move alot when one of the form vertices is too close
+		block_quads_to_move_small = set(list(block_quads_to_move_small))
+		
+		for bad_vh_idx in list(bad_block_vh):
+			normals = np.delete(form_segment_normals[prism_fh_dict1[bad_vh_idx]], 2, 1).sum(0)	#removes z axis of normals and sums normal vector components
+			i_n = np.argmax(np.abs(normals))			#and calcs sign of max normal vector component
+			avg_max_normal = np.array([0,0])
+			avg_max_normal[i_n] = np.sign(normals[i_n])
+			avg_max_normal = np.append(avg_max_normal, np.array([0]) ,0)
+			block_quads_to_move_full.add(np.where((block_quad_normals == avg_max_normal).all(1))[0][0])		#add witch block quad needs to be moved
+		
+
+		block_quads_to_move_small = np.asarray(tuple(block_quads_to_move_small - block_quads_to_move_full), dtype = "int64")  #ako vec strenicu pomicem puno, nema smisla da ju pomaknem malo
+		block_quads_to_move_full = np.asarray(list(block_quads_to_move_full), dtype = "int64")
+		block_vh_idx_to_move_full = block_quad_vh_idx[block_quads_to_move_full]
+		block_vh_idx_to_move_small = block_quad_vh_idx[block_quads_to_move_small]
+		
+		block_normals_to_move_full = block_quad_normals[block_quads_to_move_full]
+		block_normals_to_move_small = block_quad_normals[block_quads_to_move_small]
+		
+		if (np.abs(block_normals_to_move_full[:,0]) == 1.0).any():
+			L = np.max(np.abs(np.delete(form_mesh.points(), [1,2], 1)))	#find max dims of form
+		else:
+			L = 0
+		
+		if (np.abs(block_normals_to_move_full[:,1]) == 1.0).any():
+			B = np.max(np.abs(np.delete(form_mesh.points(), [0,2], 1)))
+		else:
+			B = 0
+	
+		move_vector_full = np.array([L/10,B/0.25,0]) * block_normals_to_move_full
+		for i in range(block_quads_to_move_full.shape[0]):		#ovo mora preko for loopa jer corner verteksi bi se samo pomaknuli u jednom smijeru inace
+			block_points[block_vh_idx_to_move_full[i]] += move_vector_full[i]
+		
+		move_vector_small = np.array([1e-2,1e-2,1e-2]) * block_normals_to_move_small
+		for i in range(block_quads_to_move_small.shape[0]):		#ovo mora preko for loopa jer corner verteksi bi se samo pomaknuli u jednom smijeru inace
+			block_points[block_vh_idx_to_move_small[i]] += move_vector_small[i]
+		
+		block_mesh = om.TriMesh(block_points, block_fvi)
+		
+		block_position =  block_points[0]
+		block_dims = block_points[7] - block_points[0]
+		# return block_mesh
+		return cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = True)
+
+	
+		# -------
+	
+		# ax.scatter(block_points[[0,2,4,6]][:,0],block_points[[0,2,4,6]][:,1],block_points[[0,2,4,6]][:,2], c = "purple")
+	
+		#plot uncut block
+		
+		# tp = block_mesh.points()[block_mesh.face_vertex_indices()]
+		# v0 = tp[:,0]
+		# centroids = tp.sum(1)/3
+		# normals = np.cross(tp[:,1] - tp[:,0], tp[:,2] - tp[:,0])
+		# tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
+		# for tri in list(tp):
+			# ax.plot(tri[:,0],tri[:,1],tri[:,2], "yellow")
+		# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "red")
+		
+		
+		
+		
+		
+		# block_points_to_move = block_points_to_move + move_vector
+		
+		# for block_quad_id in block_quads_to_move
+			# to_move = block_quad_vh_idx
+		# print(block_quads_to_move)
+		#recalc form segment inside points
+		# block_tpoints = block_points[block_fvi]
+		# block_points_form_segment_dist = dist_p_plane2(form_segment_points, block_tpoints)
+		# print(block_points_form_segment_dist[3:4])
+		# form_segment_inside_vh_idx = np.where((block_points_form_segment_dist <= 0.0).all(-1))[0]  #<= 0 jer mora biti sa unutarnje strane i tocke idu od jedne palube do druge, pa im udaljenost moze biti 0
+		# print(form_segment_inside_vh_idx)
+	
+	
+		# block_mesh = om.TriMesh(block_points, block_fvi)
+		# print(block_points[block_vh_to_be_moved])
+	if block_inside_vh_idx.shape[0] == 8:	#if block is completely in 
+		return block_mesh
+	
+	
+	# ljk = form_segment_mesh.points()[3:4]
+	
+	# ax.scatter(ljk[:,0],ljk[:,1],ljk[:,2], c = "black")
+	
+	
+	
+	#precalc block and segment normals:
+	#check if block tpoints was already defined to avoid wasting time:
+	
+	if 'block_tpoints' not in locals():
+		block_tpoints = block_points[block_fvi]
+	block_normals = np.cross(block_tpoints[:,1] - block_tpoints[:,0], block_tpoints[:,2] - block_tpoints[:,0])
+	block_normals = block_normals/((block_normals**2).sum(-1)**0.5).reshape(-1,1)
 	
 	#witch mesh faces are inside, and witch need to be cut, make data dicts with inside points 
 	form_bool = np.equal(np.expand_dims(form_segment_fvi,0), form_segment_inside_vh_idx.reshape(-1,1,1))	#bool that says witch inside vh are where			
@@ -1212,7 +1047,6 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 	# form_segment_all_vh_in_fh_idx = np.where(form_bool2)[0]			#fh with all vertices on the inside; merge with cut block mesh later
 	# form_segment_fh_idx_to_cut = np.where(~form_bool2)[0]
 	
-	block_fvi = block_mesh.face_vertex_indices()
 	block_bool = np.equal(np.expand_dims(block_fvi,0), block_inside_vh_idx.reshape(-1,1,1))			#bool of block seg fvi ; True means that a vi is inside
 	block_ind = np.where(block_bool)			#[0] are indices of block_inside_vh_idx, [1] are fh
 	
@@ -1258,6 +1092,10 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 		block_merge_mesh_list = []
 	for block_fh in list(block_fh_to_stitch):
 		points = unique_close2(block_data_dict[block_fh])
+		# print(points.shape)
+		# ax.scatter(points[:,0],points[:,1],points[:,2], c = "red")
+	
+		# points =block_data_dict[block_fh]
 		if points.shape[0] >= 3:
 			original_face_normal = block_normals[block_fh]
 			# points = sort_by_angle(points, original_face_normal)
@@ -1286,6 +1124,10 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 	# print(form_segment_fh_to_stitch)
 	for form_fh in list(form_segment_fh_to_stitch):
 		points = unique_close2(form_segment_data_dict[form_fh])
+		# print(points.shape)
+		# ax.scatter(points[:,0],points[:,1],points[:,2], c = "yellow")
+	
+		# points = form_segment_data_dict[form_fh]
 		# if (points.shape[0] >= 3) and are_all_points_colinear(points) == False:		#must be atleast 3 points for face and points must not be colinear!
 		if (points.shape[0] >= 3):
 			original_face_normal = form_segment_normals[form_fh]
@@ -1298,7 +1140,10 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 				cut_mesh = flip_mesh_face_orientation(cut_mesh)
 			form_segment_merge_mesh_list.append(cut_mesh)
 		
-	
+	final_mesh = hard_merge_meshes2(block_merge_mesh_list + form_segment_merge_mesh_list)
+	#za plotanje:
+	# mesh1 = hard_merge_meshes2( form_segment_merge_mesh_list)
+	# mesh2 = hard_merge_meshes2(block_merge_mesh_list)
 	
 	#make new clean mesh function(with option to sync vh and fh), new stitch
 	#either stitch face dosen't work as intended or form mesh has duplicates! both
@@ -1308,17 +1153,108 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 	# print("form n points:")
 	# print(hard_merge_meshes2(form_segment_merge_mesh_list).points().shape[0])	
 	
+	
+	#plot intersection points
+	# print(intersection_points)
+	# ax.scatter(intersection_points[:,:,0],intersection_points[:,:,1],intersection_points[:,:,2], c = "black")
+	
+	# plot form segment
+	
+	# tp = form_segment_mesh.points()[form_segment_mesh.face_vertex_indices()]
+	# v0 = tp[:,0]
+	# centroids = tp.sum(1)/3
+	# normals = np.cross(tp[:,1] - tp[:,0], tp[:,2] - tp[:,0])
+	# tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
+	# for tri in list(tp):
+		# ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
+	# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "blue")
+	
+	#plot block inside points
+	
+	# tp = block_mesh.points()
+	# ax.scatter(tp[:,0],tp[:,1],tp[:,2], c = "black")
+	
+	#plot uncut block
+	
+	# tp = block_mesh.points()[block_mesh.face_vertex_indices()]
+	# v0 = tp[:,0]
+	# centroids = tp.sum(1)/3
+	# normals = np.cross(tp[:,1] - tp[:,0], tp[:,2] - tp[:,0])
+	# tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
+	# for tri in list(tp):
+		# ax.plot(tri[:,0],tri[:,1],tri[:,2], "yellow")
+	# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "red")
+	
+	# plot cut blok with boundary edges 
+	# points = mesh1.points()
+	# evi = mesh1.edge_vertex_indices()
+	# fvi = mesh1.face_vertex_indices()
+	# print(points.shape)
+	# c = 0
+	# for eh in mesh1.edges():
+		# ep = points[evi[eh.idx()]]
+		# if mesh1.is_boundary(eh):
+			# c += 1
+			# ax.plot(ep[:,0],ep[:,1],ep[:,2], "red")
+		# else:
+			# ax.plot(ep[:,0],ep[:,1],ep[:,2], "blue")
+	
+	# centroids = points[fvi].sum(1)/3
+	# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "orange")
+	
+	# ax.scatter(points[:,0],points[:,1],points[:,2], c = "purple")
+	
+	# points = mesh2.points()
+	# evi = mesh2.edge_vertex_indices()
+	# fvi = mesh2.face_vertex_indices()
+	# print(points.shape)
+	# c = 0
+	# for eh in mesh2.edges():
+		# ep = points[evi[eh.idx()]]
+		# if mesh2.is_boundary(eh):
+			# c += 1
+			# ax.plot(ep[:,0],ep[:,1],ep[:,2], "red")
+		# else:
+			# ax.plot(ep[:,0],ep[:,1],ep[:,2], "green")
+	
+	# centroids = points[fvi].sum(1)/3
+	# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "black")
+	# ax.scatter(points[:,0],points[:,1],points[:,2], c = "orange")
+	
+	
+	
+	
+	# print(c)
+		# normals = normals/((normals**2).sum(-1)**0.5).reshape(-1,1)
+		# normals = np.append(centroids.reshape(-1,1,3), (normals + centroids).reshape(-1,1,3), 1)
+	
+	
+	# for mesh in form_segment_merge_mesh_list:
+		# tp = mesh.points()[mesh.face_vertex_indices()]
+		# v0 = tp[:,0]
+		# centroids = tp.sum(1)/3
+		# normals = np.cross(tp[:,1] - tp[:,0], tp[:,2] - tp[:,0])
+		# tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
+
+		# for tri in list(tp):
+			# ax.plot(tri[:,0],tri[:,1],tri[:,2], "yellow")
+		# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "yellow")
+
 	# for mesh in block_merge_mesh_list:
 		# tp = mesh.points()[mesh.face_vertex_indices()]
 		# v0 = tp[:,0]
 		# centroids = tp.sum(1)/3
 		# normals = np.cross(tp[:,1] - tp[:,0], tp[:,2] - tp[:,0])
-		# normals = normals/((normals**2).sum(-1)**0.5).reshape(-1,1)
-		# normals = np.append(centroids.reshape(-1,1,3), (normals + centroids).reshape(-1,1,3), 1)
 		# tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
+
 		# for tri in list(tp):
-			# ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
-		# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "blue")
+			# ax.plot(tri[:,0],tri[:,1],tri[:,2], "green")
+		# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "green")
+
+
+
+
+
 		# for n in list(normals):
 			# ax.plot(n[:,0],n[:,1],n[:,2], "blue")
 		# for int in list(intersection_points):
@@ -1342,7 +1278,7 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 	
 		# for int in list(intersection_points):
 			# ax.scatter(int[:,0],int[:,1],int[:,2], c = "purple")
-	
+	# plt.show()
 	
 	
 	# plot_block:
@@ -1397,7 +1333,6 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 	# for tri in list(tp):
 		# ax.plot(tri[:,0],tri[:,1],tri[:,2], "green")
 				
-	final_mesh = hard_merge_meshes2(block_merge_mesh_list + form_segment_merge_mesh_list)
 	#final merged mesh plot:
 	# points = final_mesh.points()
 	# evi = final_mesh.edge_vertex_indices()
@@ -1408,528 +1343,10 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position):
 			
 			
 	# plt.show()
-	
+	print(is_mesh_closed(final_mesh))
 	return final_mesh
-	
-	
-	
-	# form_inside_points = form_mesh.points()[form_inside_vh_idx]
-	# form_seg_inside_points = form_segment_mesh.points()[form_segment_inside_vh_idx] + np.full(3, 0.01)
-	# ax.scatter(form_seg_inside_points[:,0],form_seg_inside_points[:,1],form_seg_inside_points[:,2], c ="blue")
-	# ax.scatter(form_inside_points[:,0],form_inside_points[:,1],form_inside_points[:,2], c = "green")
-	
-	
-	# fvi = form_segment_mesh.face_vertex_indices()
-	# points = form_segment_mesh.points()[fvi]
-	# for trip in points:
-		# trip = np.append(trip, np.expand_dims(trip[0],0),0)
-		# ax.plot(trip[:,0],trip[:,1],trip[:,2], "blue")
-	
-	# fvi = block_mesh.face_vertex_indices()
-	# points = block_mesh.points()[fvi]
-	
-	# for trip in points:
-		# trip = np.append(trip, np.expand_dims(trip[0],0),0)
-		# ax.plot(trip[:,0],trip[:,1],trip[:,2], "red")
-	
-	
-	# plt.show()
-	
 
 	
-def cut_mesh(block_mesh, form_mesh, block_dims, block_position):			#unfinished
-	start = time.time()
-	uncut_block = copy.copy(block_mesh)
-	#get form data(faces to check and inside vh):
-	form_data = get_faces_near_block(block_mesh, form_mesh, block_dims, block_position)
-	#get more faces for safety:
-	mesh_ffi = form_mesh.face_face_indices().tolist()
-	form_fh_idx_to_check = get_neigbour_faces(form_data[0], mesh_ffi, n = 2)
-	form_inside_points = form_data[1]
-	form_segment_mesh = hard_merge_meshes([extract_mesh(form_fh_idx_to_check, form_mesh)])
-	uncut_segment = copy.copy(form_segment_mesh)
-	
-	block_fvi_list = list(block_mesh.face_vertex_indices())
-	block_points = block_mesh.points()
-	
-	form_fvi_list = list(form_segment_mesh.face_vertex_indices())
-	form_points = form_segment_mesh.points()	
-	segment_inside_vh_idx_list = sync_vh_idx(form_inside_points, form_points)
-	
-	block_bad_fh_idx = []
-	form_bad_fh_idx = []
-	block_cut_faces_mesh_list = []
-	form_segment_cut_faces_mesh_list = []
-	block_inside_vh_idx_list = []
-	block_outside_vh_idx_list = []			#vh idx to be deleted 
-	block_face_data = dict()			#key is fh_idx, [0] is inside_vh_idx, [1] is unordered sets if intersection points
-	form_face_data = dict()
-	
-	#get block inside vh_idx list: 													#ovo dobro radi
-	j = np.array([0,1,0])
-	for vh_idx in range(block_points.shape[0]):
-		point = block_points[vh_idx]
-		for face_fh_idx in range(len(form_fvi_list)):
-			face_fvi = form_fvi_list[face_fh_idx]
-			face_points = form_points[face_fvi]
-			inter_data = line_tri_inter(point, j, face_points)	#[0] is None if no intersection
-			if inter_data[0] is not None:	#there is an intersection
-				pi_y = abs(inter_data[0][1])		#y coordinate of intersection
-				if abs(point[1]) <= pi_y:
-					block_inside_vh_idx_list.append(vh_idx)
-					break
-				else:
-					block_outside_vh_idx_list.append(vh_idx)		
-					break
-		else:					#if intersection was none for all faces then point is outside by x axis
-			block_outside_vh_idx_list.append(vh_idx)		
-	
-	#make form face division dict here so no repetitition occurs in for loop below
-	for form_fh_idx in range(len(form_fvi_list)):										#dobro
-		form_fvi = form_fvi_list[form_fh_idx]
-		form_face_points = form_points[form_fvi]
-		if np.allclose(np.cross(form_face_points[1]-form_face_points[0], form_face_points[2]-form_face_points[0]), 0.0) == False:	#if face is not degenerate
-			form_inside_vh_idx = []			#treba li outside set?
-			for form_vertex_idx in list(form_fvi):
-				if form_vertex_idx in segment_inside_vh_idx_list:
-					form_inside_vh_idx.append(form_vertex_idx)
-				else:
-					#treba li outside set?
-					pass	
-			#face_normal = form_mesh.calc_face_normal(form_mesh.face_handle(form_fh_idx))     
-			face_normal = np.cross(form_face_points[2]-form_face_points[0],form_face_points[1]-form_face_points[0])
-			form_face_data[form_fh_idx] = [form_inside_vh_idx, np.empty((0,3)), face_normal]	#update za sve bez obzira ima li inside ili nema
-		
-	#block face point division and updating intersections
-	for block_fh_idx in range(len(block_fvi_list)):
-		block_fvi = list(block_fvi_list[block_fh_idx])
-		block_face_points = list(block_points[block_fvi])
-		block_inside_vh_idx = []
-		for block_vertex_idx in block_fvi:	#division of block vh_idx by inside and outside
-			if block_vertex_idx in block_inside_vh_idx_list:
-				block_inside_vh_idx.append(block_vertex_idx)
-		if len(block_inside_vh_idx) == 1 or len(block_inside_vh_idx) == 2:	#if there are 1 or 2 inside points for this face:
-			face_normal = np.sign(block_mesh.calc_face_normal(block_mesh.face_handle(block_fh_idx)))
-			block_face_data[block_fh_idx] = [block_inside_vh_idx, np.empty((0,3)), face_normal]  #[1] is intersection pairs 
-			#update dict with empty intersect pairs
-			#get intersection:
-			i = 0
-			for form_fh_idx in list(form_face_data.keys()):		#for all valid faces in faces to check
-				form_fvi = form_fvi_list[form_fh_idx]
-				form_face_points = list(form_points[form_fvi])
-				#intersections:
-				intersection_points =  tri_tri_inter(block_face_points, form_face_points)
-				if intersection_points is not None:			#intersection must not be none; will allways have 2 intersection points			
-					block_face_data[block_fh_idx][1] = np.append(block_face_data[block_fh_idx][1],intersection_points ,0)
-					inlen = len(form_face_data[form_fh_idx][0])
-					if inlen == 1 or inlen == 2:
-						#points_to_add = np.empty((0,3))
-						#inside_vh_idx = form_face_data[form_fh_idx][0]
-						#inside_points = form_points[inside_vh_idx]
-						#for intersection_point in list(intersection_points):
-						#	print(inside_points, intersection_point)
-						#	if np.equal(inside_points, intersection_point).all(1).any() == False:	# if intersection point is same as an inside point
-						#		points_to_add = np.append(points_to_add, np.expand_dims(intersection_point,0),0)
-						form_face_data[form_fh_idx][1] = np.append(form_face_data[form_fh_idx][1], intersection_points,0)
-					
-#				if i == 9 and block_fh_idx == 1:		#(i,j)  (8,0)  (9,1)krivo
-#					print("ping")
-#								
-#					import matplotlib.pyplot as plt
-#					from mpl_toolkits.mplot3d import Axes3D
-#					fig = plt.figure()
-#					ax = fig.add_subplot(111, projection='3d')
-#					ax.set_xlabel("$X$")
-#					ax.set_ylabel("$Y$")
-#					ax.set_zlabel("$Z$")
-#					plot_fh_3d([form_fh_idx], form_fvi_list, form_points, ax, "blue")
-#					#plot_fh_3d(list(range(len(block_fvi_list))), block_fvi_list, block_points, ax, "red")
-#					plot_fh_3d([block_fh_idx], block_fvi_list, block_points, ax, "red")
-#					data = (1, block_face_data[block_fh_idx])
-#					#for data in list(block_face_data.items()):
-#					inside_points = block_points[data[1][0]]
-#					#intersection_points = data[1][1]			#change unique close tolerances if needed
-					#ax.scatter(intersection_points[:,0],intersection_points[:,1],intersection_points[:,2], "orange")		#tri_tri se sijece sa krivim mjestima
-					#ax.scatter(inside_points[:,0],inside_points[:,1],inside_points[:,2], "purple")			#inside pointovi su dobri
-					
-					#for fh in form_fh_idx_to_check:
-					#	fvi = form_fvi_list[fh]
-					#	points = form_points[fvi]
-					#	tri = np.append(points, np.expand_dims(points[0], 0), 0)
-					#	ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
-					#ax.plot(tri1[:,0],tri1[:,1],tri1[:,2], "red")
-					#ax.plot(tri2[:,0],tri2[:,1],tri2[:,2], "green")
-#					if intersection_points is not None:
-#						ax.scatter(intersection_points[:,0],intersection_points[:,1],intersection_points[:,2], c = "orange")
-#					s1 = tri_plane_inter(block_face_points, form_face_points)
-#					s2 = tri_plane_inter(form_face_points, block_face_points)
-#					ax.scatter(s1[:,0],s1[:,1],s1[:,2],  c = "red")			#inside pointovi su dobri
-#					ax.scatter(s2[:,0],s2[:,1],s2[:,2],  c = "blue")
-#					print(intersection_points,s1,s2)
-#					print(segment_inter(s1,s2))
-					
-#					line_vector = s1[1] - s1[0]
-#					i = np.where(line_vector != 0)[0][0] #coordinate index where both segments are not 0
-					
-#					s1min = np.min(s1[:,i])
-#					s1max = np.max(s1[:,i])
-#					s2min = np.min(s2[:,i])
-#					s2max = np.max(s2[:,i])
-					
-#					print(s1min <= s2min <= s1max, s1min <= s2max <= s1max, s2min <= s1min <= s2max, s2min <= s1max <= s2max)
-	#				if (s1[0][i] <= s2[0][i] <= s1[1][i]) or (s1[0][i] <= s2[1][i] <= s1[1][i]) or (s2[0][i] <= s1[0][i] <= s2[1][i]) or (s2[0][i] <= s1[1][i] <= s2[1][i]):
-	#					u = np.append(s1, s2, 0) #unity array
-	#					mini = np.where(u[:,i] == np.min(u[:,i]) )[0][0] #first row index with min valid value
-	#					maxi = np.where(u[:,i] == np.max(u[:,i]) )[0][0] #first row index with max valid value
-	#					print(np.delete(u, (mini, maxi), 0))  #return unity with max and min points deleted
-	#				else:
-	#					print("error") 
-					
-					
-					#print(s1, s2)
-					
-					
-					#print(block_face_points)
-					#print(form_face_points)
-					#print(intersection_points)
-					
-#					plt.show()
-								
-#				i+=1
-				
-	#make cut block meshes:				#imamo prazne intersection pointove u dictu a imaju inside pointove!
-	for data in list(block_face_data.items()):
-		#fh_idx = data[0]
-		#fvi = block_fvi_list [fh_idx]
-		inside_points = block_points[data[1][0]]
-		intersection_points = data[1][1]			#change unique close tolerances if needed
-#		if intersection_points.shape[0] == 0 and (inside_points.shape[0] == 1 or inside_points.shape[0] == 2):			#postoje pointovi sa 0 intersecta i 1 ili 2 inside tocke! ---> tri tri ne radi dobro!!!!!!!!!!!!!!!
-		#print(inside_points)
-		#print(intersection_points)
-		intersection_points = sort_by_dist(unique_close(intersection_points))
-		#print(intersection_points)
-		cut_mesh = stitch_face(inside_points, intersection_points)
-		normal = np.sign(cut_mesh.calc_face_normal(cut_mesh.face_handle(0)))	 #all are in same plane 
-		if np.array_equal(normal, data[1][2]) == False: 	#normals and axes are paralell so sign is enough to check for paralel
-			cut_mesh = flip_mesh_face_orientation(cut_mesh)
-		block_cut_faces_mesh_list.append(cut_mesh)		#stitch ne radi dobro!!!!	probaj jos povecat tolerancije stitcha
-
-	#make cut form segment meshes:
-	for data in list(form_face_data.items()):
-		intersection_points = data[1][1]
-		inside_vh_idx = data[1][0]
-		if intersection_points.shape[0] > 0:
-			fh_idx = data[0]
-			inside_points = form_points[inside_vh_idx]
-			intersection_points = sort_by_dist(unique_close(intersection_points))
-			#print(inside_points, intersection_points)
-			cut_mesh = stitch_face(inside_points, intersection_points)
-			if cut_mesh.face_vertex_indices().shape[0] > 0: #if there are faces in mesh
-				n1 = data[1][2]
-				points = cut_mesh.points()[cut_mesh.face_vertex_indices()[0]]
-				#n2 = cut_mesh.calc_face_normal(cut_mesh.face_handle(0))	 #all are in same plane 
-				n2 = np.cross(points[2]-points[0],points[1]-points[0])
-				#print(cut_mesh.face_vertex_indices())
-				#print(cut_mesh.points()[cut_mesh.face_vertex_indices()[0]])
-				#print(n1,n2,np.dot(n1,n2))
-
-				
-				#i = np.where(n2 != 0)[0][0]
-				#print(i)
-				if np.dot(n1,n2) < 0.0: # if normals are not in same direction		
-					cut_mesh = flip_mesh_face_orientation(cut_mesh)
-				form_segment_cut_faces_mesh_list.append(cut_mesh)		#stitch ne radi dobro!!!!	probaj jos povecat tolerancije stitcha
-		#elif len(inside_vh_idx) == 0:
-		#	fh_idx = data[0]
-	
-	for bad_vh_idx in block_outside_vh_idx_list:
-		block_mesh.delete_vertex(block_mesh.vertex_handle(bad_vh_idx), False)
-	block_mesh.garbage_collection()
-	block_cut_faces_mesh_list.insert(0, block_mesh)
-	#block_cut_faces_mesh_list = [block_cut_faces_mesh_list[0]]
-	
-	for vh_idx in range(form_points.shape[0]):
-		if vh_idx not in segment_inside_vh_idx_list:
-			vh = form_segment_mesh.vertex_handle(vh_idx)
-			form_segment_mesh.delete_vertex(vh, True)
-	form_segment_mesh.garbage_collection()
-	form_segment_cut_faces_mesh_list.insert(0, form_segment_mesh)
-	#form_segment_cut_faces_mesh_list = [form_segment_mesh]
-
-	
-	
-	
-	
-	
-	
-#	print (form_segment_mesh.points())
-#	print(form_segment_mesh.face_vertex_indices())
-#	print(np.isclose(form_segment_mesh.points()[0],form_segment_mesh.points()[1]))
-#	print(form_segment_mesh.n_faces())
-#	for fvi in form_segment_mesh.face_vertex_indices():
-#		points = form_segment_mesh.points()[fvi]
-#		print(np.cross(points[2]-points[0],points[1]-points[0]))
-#	#complex edgevi; neki facevi se sijeku na topu i bottomu blocka
-#	import time			
-#	import matplotlib.pyplot as plt
-#	from mpl_toolkits.mplot3d import Axes3D
-#	fig = plt.figure()
-#	ax = fig.add_subplot(111, projection='3d')
-#	ax.set_xlabel("$X$")
-#	ax.set_ylabel("$Y$")
-#	ax.set_zlabel("$Z$")
-
-	
-	
-	
-	
-	#	block_fh_to_plot = list(range(12))		#error at (8,9), [10,11] 10
-#	plot_fh_3d(form_fh_idx_to_check, form_fvi_list, form_points, ax, "blue")
-	#plot_fh_3d(list(range(len(block_fvi_list))), block_fvi_list, block_points, ax, "red")
-#	plot_fh_3d(block_fh_to_plot, block_fvi_list, block_points, ax, "red")
-#	for data in list(block_face_data.items()):
-#		if data[0] in block_fh_to_plot:
-#			inside_points = block_points[data[1][0]]
-#			intersection_points = data[1][1]			#change unique close tolerances if needed
-#			intersection_points = sort_by_dist(unique_close(intersection_points))
-			#print(intersection_points)
-			#print(len((intersection_points)))
-#			ax.scatter(intersection_points[:,0],intersection_points[:,1],intersection_points[:,2], c = "purple")		#tri_tri se sijece sa krivim mjestima
-#			ax.scatter(inside_points[:,0],inside_points[:,1],inside_points[:,2], c = "orange")			#inside pointovi su dobri
-#			print("inside_points:")
-#			print(inside_points)
-#			print("intersection_point:")
-#			print(intersection_points)
-#			cut_block_mesh = stitch_face(inside_points, intersection_points)
-#			plot_fh_3d(list(range(len(list(cut_block_mesh.face_vertex_indices())))), list(cut_block_mesh.face_vertex_indices()), cut_block_mesh.points(), ax, "purple")
-			#for fh in form_fh_idx_to_check:
-			#	fvi = form_fvi_list[fh]
-			#	points = form_points[fvi]
-			#	tri = np.append(points, np.expand_dims(points[0], 0), 0)
-			#	ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
-			#ax.plot(tri1[:,0],tri1[:,1],tri1[:,2], "red")
-			#ax.plot(tri2[:,0],tri2[:,1],tri2[:,2], "green")
-			#ax.scatter(intersection_points[:,0],intersection_points[:,1],intersection_points[:,2], "orange")
-
-	cut_block_mesh = hard_merge_meshes(block_cut_faces_mesh_list + form_segment_cut_faces_mesh_list)		#soft merge potvrduje da svi facevi tamo i postoje na pravim mjestima, na baisic paineru sam edito
-	#plot_fh_3d(list(range(len(list(uncut_segment.face_vertex_indices())))), list(uncut_segment.face_vertex_indices()), uncut_segment.points(), ax, "blue")
-	#plot_fh_3d(list(range(len(list(uncut_block.face_vertex_indices())))), list(uncut_block.face_vertex_indices()), uncut_block.points(), ax, "Red")
-	
-	#for mesh in form_segment_cut_faces_mesh_list:
-	#	plot_fh_3d(list(range(len(list(mesh.face_vertex_indices())))), list(mesh.face_vertex_indices()), mesh.points(), ax, "purple")
-#	i = [0]
-	#for x in i:
-	#	print("flies")
-	#	print(form_segment_cut_faces_mesh_list[x].points())
-		#plot_fh_3d(list(range(len(list(form_segment_cut_faces_mesh_list[x].face_vertex_indices())))), list(form_segment_cut_faces_mesh_list[x].face_vertex_indices()), form_segment_cut_faces_mesh_list[x].points(), ax, "purple")
-	
-#	i = [6]
-	#for x in i:
-	#	print("block")
-	#	print(block_cut_faces_mesh_list[x].points())
-	#	plot_fh_3d(list(range(len(list(block_cut_faces_mesh_list[x].face_vertex_indices())))), list(block_cut_faces_mesh_list[x].face_vertex_indices()), block_cut_faces_mesh_list[x].points(), ax, "purple")
-		
-
-
-
-
-
-
-
-
-
-#		plot_fh_3d(list(range(len(list(cut_block_mesh.face_vertex_indices())))), list(cut_block_mesh.face_vertex_indices()), cut_block_mesh.points(), ax, "blue")
-	
-#	fh_to_plot = [16,15]
-#	for fvi in list(cut_block_mesh.face_vertex_indices()):
-#		points = cut_block_mesh.points()[fvi]
-#		if np.allclose(np.cross(points[2]-points[0],points[1]-points[0]), 0):
-#			points = np.append(points,np.expand_dims(points[0],0),0)
-#			ax.plot(points[:,0],points[:,1],points[:,2], c = "red")
-#	
-#	ax.scatter(cut_block_mesh.points()[-1][0],cut_block_mesh.points()[-1][1],cut_block_mesh.points()[-1][2], c = "green")
-#	ax.scatter(cut_block_mesh.points()[5][0],cut_block_mesh.points()[5][1],cut_block_mesh.points()[5][2], c = "green")
-#	
-#	fvi_list = cut_block_mesh.face_vertex_indices()
-#	print(fvi_list)
-#	for fh_idx in fh_to_plot:
-#		fvi = fvi_list[fh_idx]
-#		points = cut_block_mesh.points()[fvi]
-#		#print(fvi,points)
-#		points = np.append(points,np.expand_dims(points[0],0),0)
-#		ax.plot(points[:,0],points[:,1],points[:,2], c = "red")
-#	
-#	print(cut_block_mesh.face_face_indices()[16])
-		
-
-
-
-
-
-
-
-
-
-
-		#print("aa")
-	#print(cut_block_mesh.points())
-	#print(np.isclose(cut_block_mesh.points()[-1],cut_block_mesh.points()[5]))
-	#print(cut_block_mesh.points()[-1]-cut_block_mesh.points()[5])
-	
-	#to_plot = 1
-	#i=0
-	#for data in list(form_face_data.items()):
-	#	inter = data[1][1]
-	#	if inter.shape[0] != 0:
-	#		ax.scatter(inter[:,0],inter[:,1],inter[:,2], c = "orange")
-	#		i+=1
-	#	if i == to_plot:
-	#		break
-	#print(form_inside_points)
-	#ax.scatter(form_inside_points[:,0],form_inside_points[:,1],form_inside_points[:,2], c = "green")
-	#plt.show()
-
-	
-#	print("1,5")
-	#print(block_cut_faces_mesh_list[3].points())
-	#print(block_cut_faces_mesh_list[3].face_vertex_indices())
-	#test_mesh_points = np.array([[50,0,15.4],[50,6.71557609,15.4],[50,6.8226125,14.5812865]]) 
-	#test_mesh_points = np.array([[1.0,0.0,0.0],[2.0,0.0,2.0],[3.0,0.0,1.0]]) 
-	#test_mesh_fvi = np.array([[0,1,2]])
-	#print(test_mesh_points, test_mesh_fvi)
-	#test_mesh = om.TriMesh(test_mesh_points, test_mesh_fvi)
-	#print(test_mesh.face_normals(),test_mesh.face_normals()[0],test_mesh.face_normals()[1],test_mesh.face_normals()[2])
-	#print(np.cross(test_mesh_points[2]-test_mesh_points[0],test_mesh_points[1]-test_mesh_points[0]))
-	#print(block_cut_faces_mesh_list[5].face_normals())
-					#hard merge ne radi dobro!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! (1,5)
-#	print(block_cut_faces_mesh_list[1].points(), block_cut_faces_mesh_list[1].face_vertex_indices())
-#	print(block_cut_faces_mesh_list[5].points(), block_cut_faces_mesh_list[5].face_vertex_indices())
-#	print("merge")
-	#cut_block_mesh = soft_merge_meshes(block_cut_faces_mesh_list + [form_segment_mesh])
-	#cut_block_mesh = test_mesh
-#	test_tri = np.array([[7,0,12.4],[0,25,12.4],[7,25,12.4]]) #na ovom trekutu nema nikakvih intersectiona tri_plane inter je los
-#	inter_array = np.empty((0,3))
-#	for form_fh_idx in range(len(form_fvi_list)):
-#		fvi = form_fvi_list[form_fh_idx]
-#		face_points = form_points[fvi]
-#		if np.allclose(np.cross(face_points[1]-face_points[0], face_points[2] - face_points[0]), 0) == False:
-#			inter = tri_tri_inter(test_tri, face_points)
-#			if inter is not None:
-#				inter_array = np.append(inter_array, inter)
-	
-	#print(inter_array)		
-				#	if inter_array.shape[0] == 0:
-#		print("ping")
-
-	#print(len(block_face_data))
-	
-	print("mesh cut time: " + str(time.time()-start))
-	#print("new_cut volume:")
-	#print(calc_mesh_volume(cut_block_mesh)) 	#old fit mesh volume = 144.22083786629366 new is 144.5123765
-	return cut_block_mesh
-	
-def plot_fh_3d(mesh_fh_list, mesh_fvi_list, points_array, ax, color = "green"):
-	for fh in mesh_fh_list:
-		fvi = mesh_fvi_list[fh]
-		points = points_array[fvi]
-		tri = np.append(points, np.expand_dims(points[0], 0), 0)
-		ax.plot(tri[:,0],tri[:,1],tri[:,2], color)
-
-
-
-	
-def sort_pairs(unsorted_pairs):
-	unsorted_pairs = unsorted_pairs
-	sorted_points = np.empty((0,3))
-	start_point_data = np.unique(unsorted_pairs.reshape(-1,3), axis = 0, return_counts = True)
-	start_point = start_point_data[0][np.where(start_point_data[1] == 1)][0]	#prvi point koji se pojavljuje samo jedan put
-	sorted_points = np.append(sorted_points, np.expand_dims(start_point, 0), 0)
-	print("unsorted_pairs: " + str(unsorted_pairs) + "\n")
-	print("start_point: " + str(start_point) + "\n")
-	print("sortedpairs: " + str(sorted_points) + "\n") 
-	for i in range(unsorted_pairs.shape[0]):
-		index_data = np.where(np.isclose(unsorted_pairs, start_point).all(2) == True)
-		print("unsorted_pairs: " + str(unsorted_pairs) + "\n")
-		print("start_point: " + str(start_point) + "\n")
-		print("index_data: " + str(index_data) + "\n")
-		print("sortedpairs: " + str(sorted_points) + "\n") 
-		next_point = unsorted_pairs[index_data[0][0]][(index_data[1]+1)%2]
-		sorted_points = np.append(sorted_points, next_point, 0)
-		start_point = next_point
-		unsorted_pairs = np.delete(unsorted_pairs, index_data[0][0], 0)
-	return sorted_points
-	
-def unique_close(array, return_counts = False):		#returns unique close values of array
-	sorted_array = np.empty((0,3))
-	if return_counts == False:
-		for point in list(array):
-			condition = np.isclose(array, point).all(1)
-			if condition.any():								#if any point is close to any other in array 
-				index_list = np.where(condition == True)[0]
-				sorted_array = np.append(sorted_array, np.expand_dims(point,0), 0)
-				array = np.delete(array, index_list, 0)
-		
-		return sorted_array
-	else:
-		count_list = np.empty((0), dtype = "int64")
-		for point in list(array):
-			condition = np.isclose(array, point).all(1)
-			if condition.any():								#if any point is close to any other in array 
-				index_list = np.where(condition == True)[0]
-				sorted_array = np.append(sorted_array, np.expand_dims(point,0), 0)
-				count_list = np.append(count_list, int(np.array([index_list.shape[0]])))
-				array = np.delete(array, index_list, 0)
-		
-		return (sorted_array, count_list)
-
-
-		
-	# np.isclose(a, np.array([0,1,2])).all(1)  #check for close values
-def sort_by_dist(points, sort_by_min_dist = True):  # need to clean all close values
-	aritm_middle = np.sum(points, axis = 0)/points.shape[0]
-	d = aritm_middle - points
-	distance = np.sum(d**2, axis = 1)**0.5	
-	i = np.array(np.where(distance == distance.max())).flatten()[0]	#sto ako su 2 tocke jednako udaljene?	[0] da odabere samo 1
-	start_point = points[i]
-	sorted_array_shape = list(points.shape)				#if points have n dims
-	sorted_array_shape[0] = 0
-	sorted_array = np.empty(sorted_array_shape)
-	if sort_by_min_dist == True:
-		for p in range(points.shape[0]):
-			#print(start_point)
-			#print("-------------")
-			#print(points)
-			d = start_point - points
-			distance = np.sum(d**2, axis = 1)**0.5
-			i = np.array(np.where(distance == distance.min())).flatten()[0]	#sto ako su 2 tocke jednako udaljene?	[0] da odabere samo 1
-			#print("index" + str(i))
-			start_point = points[i]
-			points = np.delete(points, i, axis = 0)
-			#print("star point"+str(start_point))
-			sorted_array = np.append(sorted_array, np.expand_dims(start_point, axis = 0), axis = 0)
-	
-	elif sort_by_min_dist == False:		#trazimo po max duljini
-		for p in range(points.shape[0]):
-			#print(start_point)
-			#print("-------------")
-			#print(points)
-			d = start_point - points
-			distance = np.sum(d**2, axis = 1)**0.5
-			i = np.array(np.where(distance == distance.max())).flatten()[0]	#sto ako su 2 tocke jednako udaljene?	[0] da odabere samo 1
-			#print("index" + str(i))
-			start_point = points[i]
-			points = np.delete(points, i, axis = 0)
-			#print("star point"+str(start_point))
-			sorted_array = np.append(sorted_array, np.expand_dims(start_point, axis = 0), axis = 0)
-		
-	return sorted_array
-
-def extract_mesh(fh_idx_to_extract, mesh): #extracts faces from mash and makes a new mesh from them
-	extracted_fvi = mesh.face_vertex_indices()[fh_idx_to_extract]
-	extracted_mesh = om.TriMesh(mesh.points(), extracted_fvi)
-	delete_isolated_vertices(extracted_mesh)
-	return extracted_mesh
-
 def extract_mesh2(fh_idx_to_extract, mesh, mesh_vh_idx_to_sync = None):		#mesh vh to sync are vh idx for witch we need their new idx 
 	extracted_fvi = mesh.face_vertex_indices()[fh_idx_to_extract]
 	extracted_vi = np.unique(extracted_fvi.flatten())
@@ -1947,109 +1364,6 @@ def replace(array, values_to_replace, values_to_replace_with):			#replaces value
 	return array
 	
 	
-def sync_vh_idx(points_to_sync, cut_mesh_points):		#syncs vh_idx of points	
-	vh_idx_list = []
-	for point in list(points_to_sync):
-		vh_idx_list += np.where(np.equal(cut_mesh_points, point).all(1) == True)[0].tolist()
-	return vh_idx_list
-		
-	
-	
-def stitch_face(inside_points, intersection_points):		
-	tlen = intersection_points.shape[0]
-	mlen = tlen + inside_points.shape[0]
-	a = np.arange(2,mlen)
-	b = np.full(a.shape[0],0)
-	c = a - 1
-	mesh_fvi = np.column_stack((a,b,c))
-	
-	if inside_points.shape[0] == 2:
-		p1 = (inside_points[0], intersection_points[0])
-		p2 = (inside_points[1], intersection_points[-1])
-		if do_segments_cross(p1,p2) == False:
-			mesh_fvi[0] = np.array([1,0,(mlen-1)])
-	
-	
-	mesh_points = np.append(inside_points, intersection_points, 0)
-	mesh = om.TriMesh(mesh_points, mesh_fvi)
-	for fh_idx in range(mesh_fvi.shape[0]):
-		fvi = mesh_fvi[fh_idx]
-		face_points = mesh_points[fvi]
-		normal = np.cross(face_points[2]-face_points[0],face_points[1]-face_points[0])
-		if np.isclose(normal,0).all():	#if face is degenerate; delete it
-			fh = mesh.face_handle(fh_idx)
-			mesh.delete_face(fh, True)
-	mesh.garbage_collection()
-	#print(mesh.face_vertex_indices(), mesh.points())
-	return mesh
-	
-def stitch_face2(points, original_normal): 		#[0 and following are inside points, if there are any]
-	data = sort_by_angle(points, original_normal, True)
-	points = np.append(np.expand_dims(data[1],0),data[0],0)		#insert centroid at 0
-	n_points = points.shape[0]
-	n_faces = n_points - 2
-	a = (np.full(n_faces, 0)).reshape(-1,1)
-	c = (np.arange(n_faces) + 1).reshape(-1,1)
-	b = c + 1
-	fvi = np.concatenate((a,c,b), axis = 1)
-	fvi = np.append(fvi, np.expand_dims(np.array([0,(n_points-1),1]),0),0)
-	# print(fvi)
-	# points = np.append(np.expand_dims(centroid,0),points,0)
-	# mesh_points = points[fvi]
-	# normals = np.cross(mesh_points[:,1] - mesh_points[:,0], mesh_points[:,2] - mesh_points[:,0])
-	# bool_normals_zero = np.isclose(normals, 0).all(-1)
-	# if bool_normals_zero.any():
-		# print(bool_normals_zero)
-	
-	
-	
-	return om.TriMesh(points, fvi)
-	
-	
-	
-#	#print(inside_points)
-	#if inside_points.shape[0] == 2:
-#	#intersection_points = sort_by_dist(intersection_points)	#rewrite to iterate over list
-#	tlen = intersection_points.shape[0]
-#	mlen = tlen + inside_points.shape[0]
-#	a = np.arange(2,mlen)
-#	b = np.full(a.shape[0],0)
-#	c = a - 1
-#	mesh_fvi = np.column_stack((a,b,c))
-
-	
-#	if inside_points.shape[0] == 2:
-#		p1 = (inside_points[0], intersection_points[0])
-#		p2 = (inside_points[1], intersection_points[-1])
-#		print(do_segments_cross(p1,p2))
-#		if do_segments_cross(p1,p2):
-#			intersection_points = intersection_points[::-1]
-#			mesh_fvi[0] = np.array([mlen-1,0,1])
-#		else:
-#			inside_points = inside_points[::-1]
-#	mesh_points = np.append(inside_points, intersection_points, 0)
-	#print(mesh_points)
-	#print("\n")
-	#print(mesh_fvi)
-#	print(mesh_points, mesh_fvi)
-#	return om.TriMesh(mesh_points, mesh_fvi)
-	#elif E.shape[0] == 1:
-	#	pass
-
-	
-				
-	
-#-------------------------------------------------------------------------------		
-		
-def array_where_equal(a,b, bool = True):		#ako hocemo stupce samo stavi a.T , ako hocemo i gdje je razlicito stavimo bool = False
-	i_array = np.empty(0, dtype = "int64")
-	for i in range(a.shape[0]):
-		if np.array_equal(a[i], b) == bool:
-			i_array = np.append(i_array, i)
-			
-	return i_array
-
-
 def flip_mesh_face_orientation(mesh):
 	flipped_fvi = np.flip(mesh.face_vertex_indices(), axis = 1)
 	return om.TriMesh(mesh.points(), flipped_fvi)
@@ -2092,12 +1406,6 @@ def soft_merge_meshes(meshes, vh_idx_to_sync_list = None):	#meshes je lista sa m
 		return clean_mesh(om.TriMesh(points, merged_fvi), synced_vh_idx)	
 	
 
-def delete_degenerate_faces(mesh, vh_idx_to_sync_list = None):
-	if vh_idx_to_sync_list is None:
-		pass
-	else:
-		# normals
-		pass
 def hard_merge_meshes2(meshes, vh_idx_to_sync = None):			#vh_idx_to_sync_list is list with numpy arrays
 	if vh_idx_to_sync is None:
 		merged_mesh = soft_merge_meshes(meshes)
@@ -2159,71 +1467,6 @@ def hard_merge_meshes2(meshes, vh_idx_to_sync = None):			#vh_idx_to_sync_list is
 		return (om.TriMesh(merged_mesh_points, merged_mesh_fvi), np.unique(vh_idx_to_sync))
 	
 
-	
-#close i sa degenerate face checkom! ili u hullformu promijeniti sa unique wlinove?
-
-#radi complex edgeve!! jesu li im pointovi close?
-def hard_merge_meshes(meshes):   #meshes je lista sa meshevima
-	merged_mesh = soft_merge_meshes(meshes)
-	#data = np.unique(merged_mesh.points(), return_counts = True, axis = 0)
-	data = unique_close(merged_mesh.points(), return_counts = True)	
-	unique_points = data[0]
-	duplicate_counter = data[1]
-	points_with_duplicates = unique_points[np.where(duplicate_counter > 1)]
-	new_vh = []
-	for dpoint in list(points_with_duplicates):
-		new_vh.append(merged_mesh.add_vertex(dpoint))
-			
-	bad_fh_list = []
-	new_fvi_list = []
-	
-	
-	merged_mesh_fvi = merged_mesh.face_vertex_indices().tolist()
-	merged_mesh_points = merged_mesh.points()
-	for i in range(len(merged_mesh_fvi)):	#trazimo bad fh i mijenjamo njihov fvi u novi
-		fvi = np.asarray(merged_mesh_fvi[i])		
-		face_points = merged_mesh_points[fvi]
-		new_fvi = copy.copy(fvi)
-		for nvh in new_vh:		#trazi jeli novi vh i face imaju istu tocku
-			new_point = merged_mesh_points[nvh.idx()] 
-			
-			#new_fvi[array_where_equal(face_points, new_point)] = nvh.idx()
-			new_fvi[np.where(np.equal(face_points, new_point).all(1))] = nvh.idx()
-		if np.array_equal(fvi, new_fvi) == False:		#ako originalni i novi fvi nisu isti dodaje novi fvi u listu
-			fh = merged_mesh.face_handle(i)
-			bad_fh_list.append(fh)
-			new_fvi_list.append(new_fvi)
-			
-			
-	for bad_fh in bad_fh_list:					#delete bad faces:
-		merged_mesh.delete_face(bad_fh, False)  	#false da ne deletea izolirane vertexe
-	
-	merged_mesh.garbage_collection()
-		
-	
-	for new_fvi in new_fvi_list:				#retriangularizacija sa novim fvi	
-		new_face_vhandles = []
-		for vi in new_fvi:
-			new_vh = merged_mesh.vertex_handle(vi)
-			new_face_vhandles.append(new_vh)
-		
-		merged_mesh.add_face(new_face_vhandles)
-			
-	delete_isolated_vertices(merged_mesh)
-			
-	return merged_mesh	
-							 
-	
-
-def delete_isolated_vertices(mesh): 
-	mesh_vertex_face_indices = list(mesh.vertex_face_indices()) #kod vertex_face_indices izolirani su oni kojima je svima -1 (arrajevi moraju biti svi istevelicine pa je null -1)
-	for vh_idx in range(mesh.points().shape[0]):
-		neighbouring_faces_fh_idx = mesh_vertex_face_indices[vh_idx]
-		if np.all(neighbouring_faces_fh_idx == -1):
-			vh = mesh.vertex_handle(vh_idx)
-			mesh.delete_vertex(vh)
-	mesh.garbage_collection()
-
 def delete_isolated_vertices2(mesh, vh_idx_to_sync = None):	
 	if vh_idx_to_sync is None:
 		mesh_points = mesh.points()
@@ -2260,27 +1503,6 @@ def delete_isolated_vertices2(mesh, vh_idx_to_sync = None):
 		return (om.TriMesh(mesh_points, mesh_fvi), vh_idx_to_sync)
 
 		
-def triangle_surface(triangle_points):
-	AB = triangle_points[1]-triangle_points[0]
-	AC = triangle_points[2]-triangle_points[0]
-	surface = np.linalg.norm(np.cross(AB, AC))/2
-	return surface
-
-
-	
-def is_inside_triangle(point, triangle_points):
-	ABC = triangle_surface(triangle_points)
-	Ai = np.empty((0))
-	for i in range(triangle_points.shape[0]):
-		points = copy.copy(triangle_points)
-		points[i] = point
-		Ai = np.append(Ai, triangle_surface(points))
-	
-	if np.isclose(np.sum(Ai), ABC) == True:
-		return True
-	else:
-		return False
-
 	
 	
 def make_block(block_dims = np.array([20,6,3]), move_vector = np.array([0,0,0])):
@@ -2362,34 +1584,7 @@ def move_mesh(mesh, move_vector):
 		new_point = mesh.points()[vh.idx()] + move_vector
 		mesh.set_point(vh, new_point)
 	return mesh
-		
 	
-def get_intersection(radius, vector, face_points):
-	face_radius = face_points[0]
-	face_vector1 = face_points[1] - face_points[0]
-	face_vector2 = face_points[2] - face_points[0]
-	
-	#face_radius, face_vector1, face_vector2,
-	
-	radius_matrix = (radius - face_radius).T
-	vector_matrix = np.empty((3,3))
-	vector_matrix[:,0] = face_vector1
-	vector_matrix[:,1] = face_vector2
-	vector_matrix[:,2] = -vector
-		
-	try:
-		edge_parameter = np.linalg.solve(vector_matrix, radius_matrix)[2]
-	except:
-		return (None, None)
-	
-	intersection_point = radius + (vector * edge_parameter)
-	if is_inside_triangle(intersection_point, face_points) == True:
-		return (intersection_point, edge_parameter)
-	else:
-		return (None, edge_parameter)
-
-
-
 def is_mesh_closed(mesh):	
 	for eh in mesh.edges():		#check if mesh has any boundary edges if not mesh is closed, if yes mesh is open
 		if mesh.is_boundary(eh) == True:
@@ -2436,31 +1631,7 @@ def subdivide_mesh(mesh_list, c = 0 ,n = 1): #face po face subdividamo n puta,c 
 		
 		
 		
-
-def plot3D(points_list):
-	scatter_points = []
-	colors = ["red","green","yellow","blue","orange","purple","black","cyan","magneta"]
-	fig=plt.figure()
-	axes = plt.axes(projection='3d')
-	axes.set_xlabel("x")
-	axes.set_ylabel("y")
-	axes.set_zlabel("z")
-	
-	for i in range(len(points_list)):
-		points = points_list[i]
-		color = colors[i % (len(colors)-1)]
-		x = points[:,0]
-		y = points[:,1]
-		z = points[:,2]
-		scatter_points.append(get_scatter(axes, x, y, z, color))
-
-	#points1 = axes.scatter3D(points[:,0],points[:,1],points[:,2], color = "green"); 
-	#points2 = axes.scatter3D(supertr_points[:,0],supertr_points[:,1],supertr_points[:,2], color = "red"); 
-	#point_center = axes.scatter3D(points_centroid[0],points_centroid[1],points_centroid[2], color = "blue");
-	#supertr_center = axes.scatter3D(supertr_centroid[0],supertr_centroid[1],supertr_centroid[2], color = "black");		
-	plt.show()
-	
-   
+#ovo u numpy:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 			
 def calc_face_volume(face_points):
 	a = face_points[0]
@@ -2481,45 +1652,6 @@ def calc_mesh_volume(mesh):
 		mesh_volume += face_volume * face_sign
 	return mesh_volume
 	
-def make_block_csv_file():
-	block_dims = np.array([1,1,1])
-	mesh = make_block(block_dims)
-	mesh = subdivide_mesh([mesh], n = 1)
-	points = mesh.points().tolist()
-	fvi = mesh.face_vertex_indices().tolist()
-
-	with open("unit_block_points.csv", "w", newline = "") as csv_file:
-		csv_writer = csv.writer(csv_file)
-		for point in points:
-			csv_writer.writerow([point[0],point[1],point[2]])
-	
-	with open("unit_block_fvi.csv", "w", newline = "") as csv_file:
-		csv_writer = csv.writer(csv_file)
-		for f in fvi:
-			csv_writer.writerow([f[0],f[1],f[2]])
-	
-def make_form_points_as_csv(form_points):
-	with open("C:\\Users\\Tomislav\\Desktop\\Py_Prog\\form_points.csv", "w", newline = "") as csv_file:
-		csv_writer = csv.writer(csv_file)
-		for point in form_points:
-			csv_writer.writerow(point)
-
-
-	
-def	make_block_from_unit_csv(block_dims = np.array([1,1,1]), move_vector = np.array([0,0,0]), path = ""):
-	with open(path + "unit_block_points.csv", "r", newline ="") as csv_file:
-		csv_reader = csv.reader(csv_file)
-		points = np.asarray([line for line in csv_reader]).astype(float)
-		
-	with open(path + "unit_block_fvi.csv", "r", newline ="") as csv_file:
-		csv_reader = csv.reader(csv_file)
-		fvi = np.asarray([line for line in csv_reader]).astype(int)
-	
-
-	return om.TriMesh(points * block_dims + move_vector, fvi)
-	
-
-	
 				
 if __name__ == "__main__":
 				
@@ -2529,245 +1661,39 @@ if __name__ == "__main__":
 	fig = plt.figure()
 	ax = fig.add_subplot(111, projection='3d')
 	
+	# p = np.array([[0,0,0],[0,0,10],[0,20,20]])
+	# pp = np.array([[[0,0,0],[1,0,0],[0,1,0]],[[0,0,1],[1,0,1],[0,1,1]]])
+	# print(dist_p_plane2(p,pp))
 
-	
-	# tri1 = np.array([[0,0,0],[-1,0,0],[0,1,0]])
-	# tri2 = np.array([[0,0,0],[1,0,0],[0,1,0]])
-	# tri1_fvi = np.array([[0,1,2]])
-	# tri2_fvi = np.array([[0,1,2]])
-	# tri1_mesh = om.TriMesh(tri1, tri1_fvi)
-	# tri2_mesh = om.TriMesh(tri2, tri2_fvi)
-	
-	# print(tri1_mesh.face_normals())
-	# print(tri2_mesh.face_normals())
-	# print(tri1_mesh.calc_face_normal(tri1_mesh.face_handle(0)))
-	# combined_mesh = hard_merge_meshes([tri1_mesh,tri2_mesh])		#ne mijenja orijentaciju!!
-	# print(combined_mesh.n_faces())
-	# print("done.")
+	# p = np.array([[1,1,1.999],[-3,-3,-3]])
+	# pp = np.array([[[1,0,0],[0,1,0],[0,0,0]],[[0,0,2],[2,0,2],[0,2,2]],[[1,1,-1],[2,1,-1],[1,2,-1]]])
 	
 	
-	#replace tests
-	# array = np.array([[1,2,1],[3,8,2],[9,2,5]])
-	# a = np.array([8,9,1])
-	# replace(array, a, np.arange(a.shape[0]))
+	# p = np.array([[-3,-3,0],[1,1,1.999999]])
+	# pp = np.array([[[1,0,0],[0,1,0],[0,0,0]],[[0,0,2],[2,0,2],[0,2,2]]])
+	# print(is_in_triangular_prism2(pp,p, pair_mode = False))
 	
-	#sort by angle tests:
-	#o_normal = np.array([0,0,1])
-	#points = np.array([[3,0,0],[2,3,0],[2,-3,0],[-2,0,0]])
-	#print(sort_by_angle(points, o_normal))
+	# test problems:
+	# bp = np.array([[2, -5.26885, 5.2],[6.781, -5.26885, 5.2]][1:2])
+	bp = np.array([[2, -5.26885, 5.2],[6.781, -5.26885, 5.2],[6.781, -5.26885, 5.2],[6.781, -5.26885, 5.2],[2, -5.26885, 5.2],[6.781, -5.26885, 5.2]])
+	# tp = np.array([[[5.75445497,-5.20833602,5.2],[8.35713409,-5.3651378,5.2],[8.24153478,-5.97551904,6.25]],[[5.75445497,-5.20833602,5.2],[8.24153478,-5.97551904,6.25],[5.6316307,-5.86084806,6.25]]][0:1])
+	tp = np.array([[[5.75445497,-5.20833602,5.2],[8.35713409,-5.3651378,5.2],[8.24153478,-5.97551904,6.25]],[[5.75445497,-5.20833602,5.2],[8.24153478,-5.97551904,6.25],[5.6316307,-5.86084806,6.25]],[[5.75445497,-5.20833602,5.2],[8.35713409,-5.3651378,5.2],[8.24153478,-5.97551904,6.25]],[[5.75445497,-5.20833602,5.2],[8.35713409,-5.3651378,5.2],[8.24153478,-5.97551904,6.25]]])
+	a = is_in_triangular_prism2(tp, bp, pair_mode = False)
+	print(a[0].keys())
 	
-	# points = np.array([[9,1.5,7.5],[9,4.987,8.25],[9,4.845,7.5],[9,1.5,10]])
-	# points = np.array([[2,0,0],[0,-2,0],[-2,0,0],[0,2,0]])
-	#original_normal = np.array([1,0,0])
-	# original_normal = np.array([0,0,1])
-	# sorted_points = sort_by_angle(points, original_normal)
-	# print(points)
-	# print(sorted_points)
+	tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
+	for tri in list(tp):
+		ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
+	ax.scatter(bp[:,0],bp[:,1],bp[:,2], c = "red")
 	
-	# for mesh in block_cut_meshes_list[0:1]:
-		# tp = mesh.points()[mesh.face_vertex_indices()]
-		# print(mesh.face_vertex_indices())
-		# print(mesh.points())
-		# v0 = tp[:,0]
-		# centroids = tp.sum(1)/3
-		# normals = np.cross(tp[:,1] - tp[:,0], tp[:,2] - tp[:,0])
-		# print(normals[0],normals[1])
-		# normals = normals/((normals**2).sum(-1)**0.5).reshape(-1,1)
-		# normals = np.append(centroids.reshape(-1,1,3), (normals + centroids).reshape(-1,1,3), 1)
-		# tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
-		# for tri in list(tp):
-			# ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
-		# ax.scatter(centroids[:,0],centroids[:,1],centroids[:,2], c = "blue")
-		# for n in list(normals):
-			# ax.plot(n[:,0],n[:,1],n[:,2], "blue")
-	
-	
-	
-	#tri_tri_test:
-#	block_points = np.array([[57,0,12.4],[57,25,12.4],[57,0,15.4]])
-#	form_face_points = np.array([[55.20122969, 6.86506929, 13.9],[55.18058696, 6.67028586, 15.4],[57.77088044, 6.61292697, 15.4]])
-#	intersection_points_from_cut = np.array([[57, 6.68856821, 14.95000863],[57, 6.73519584,14.5917765]]) 
-#	print(tri_tri_inter(block_points, form_face_points))
-#	print(tri_tri_inter(block_points, form_face_points))
-	
-	# form_points = np.array([[[0.16342165, 0, 8.75],[0,4.95,10],[0.16342165,4.7095108,8.75]],[[0.16342165,0,8.75],[0,0,10],[0,4.95,10]],[[0.16342165,4.7095108,8.75],[1.31578947,5.00639569,10],[1.47060998,4.77489939,8.75]],[[0.16342165,4.7095108,8.75],[0,4.95,10],[1.31578947,5.00639569,10]]])
-	# block_points = np.array([[[-2,1.5,10],[9,1.5,10],[-2,6.5,10]],[[9,1.5,10],[9,6.5,10],[-2,6.5,10]]])
-	# form_points = np.array([[[0.16342165,0,8.75],[0,0,10],[0,4.95,10]]])
-	# form_points = np.array([[[6.69936332,5.00104038,8.75],[6.57894737,5.2014511,10],[7.89473684,5.24258705,10]]])
-	# block_points = np.array([[[9,1.5,10],[9,6.5,10],[-2,6.5,10]]])
-	
-	# print(dist_tri_p_plane2(form_points, block_points))
-	# print(dist_tri_p_plane2(block_points, form_points))
-	# data1 = tri_plane_inter2(form_points, block_points)
-	# data2 = tri_plane_inter2(block_points, form_points)
-	# s1 = data1[0]
-	# s2 = data2[0]
-	
-	
-	# for p in list(s1):
-		# ax.scatter(p[:,:,0],p[:,:,1],p[:,:,2], "blue")
-
-	# for p in list(s2):
-		# ax.scatter(p[:,:,0],p[:,:,1],p[:,:,2], "blue")
-		
-	# print(form_points[:,:,2])
-	
-	# for tri in list(form_points):
-		# tri = np.append(tri, tri[0:1], 0)
-		# ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
-	
-	# for tri in list(block_points):
-		# tri = np.append(tri, tri[0:1], 0)
-		# ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
-	
-	# data = tri_tri_inter2(block_points, form_points)	
-
-	# for p in list(data[0]):
-		# ax.scatter(p[:,0],p[:,1],p[:,2], "blue")
-	
-		
-	# plt.show()
-	
-	
-	#point = np.array([2,2,2])
-	#point_vector_j = np.array([1,1,1])
-	#face_points = np.array([[10,0,0],[0,10,0],[0,0,10]])
-#	m = 10000
-	#start_new = time.time()
-	#for i in range(m):
-	#	inter = line_tri_inter(point, point_vector_j, face_points)
-	#print("new_exe_time: " + str(time.time()-start_new))
-#
-#	start_new = time.time()
-#	for i in range(m):
-#		inter = get_intersection(point, point_vector_j, face_points)
-#	print("old_exe_time: " + str(time.time()-start_new))
-	
-	#is_in_tri test		#old = 5s new = 0.181			#ako koristim stari is_inside_triangle line_tri_inter dobro funkcionira
-	#ro = np.array([0,3.125,13.9])	#ovo nije dobro!!!
-	#rd = np.array([1.0,0.0,0.0])
-	#tri_points = np.array([[0.58831793,0,13.9],[0.78442391,5.9889293, 15.4],[0.58831793,6.17923163,13.9]])
-	#u = tri_points[1] - tri_points[0]
-	#v = tri_points[2] - tri_points[0]
-	#pi = line_plane_inter(ro, rd, tri_points)[0]
-	#print(pi)
-	#print(is_in_tri(pi, tri_points[0], u , v))
-	#print(is_inside_triangle(pi,tri_points))
-	#start_new = time.time()
-	#for i in range(m):
-	#	a = is_in_tri(p, v0, u, v)
-	#print("new_exe_time: " + str(time.time()-start_new))
-	#
-	#tri_points = np.array([[v0],[v0+u],[v0+v]])
-	#start_new = time.time()
-	#for i in range(m):
-	#	a = is_inside_triangle(p, tri_points)
-	#print("old_exe_time: " + str(time.time()-start_new))
-	
-	#block_face_points = np.array([[7,6.25,13.9],[7,9.375,13.9],[7,6.25,14.275]])
-	#form_face_points = np.array([[5.78954762, 6.32534163, 13.9],[8.55530434, 6.20031354, 15.4],[8.39016247, 6.39230443, 13.9]])
-	#tri1 = np.append(block_face_points, np.expand_dims(block_face_points[0], 0), 0)
-	#tri2 = np.append(form_face_points, np.expand_dims(form_face_points[0], 0), 0)
-	#intersection_points = tri_tri_inter(block_face_points, form_face_points)[0]
-	#print(intersection_points)
-	
-	#ray = np.array([ro,ro+rd])
-	#tri = np.array([tri_points[0], tri_points[1], tri_points[2], tri_points[0]])
-	#ax.plot(tri1[:,0],tri1[:,1],tri1[:,2], "red")
-	#ax.plot(tri2[:,0],tri2[:,1],tri2[:,2], "green")
-	#ax.scatter(intersection_points[:,0],intersection_points[:,1],intersection_points[:,2], "orange")
-	#plt.show()
-	
-	#array = np.array([[1,2,3],[1,2,3],[4,5,3],[1,2,5],[0,0,0],[0,0,0.1],[1,2,3.00000001]])
-	#print(unique_close(array))
-	
-	#E = np.array([[1,0,0],[0,0,0]])
-	#T_array = np.array([[0,0,3],[1,0,3],[2,0,3],[4,0,3]])
-	#print(stitch_face(E,T_array))
-	
-	#hard merge meshes 2 tests:
-	# points1 = np.array([[1,0,0],[0,1,0],[0,0,0],[0.5,0,0]])
-	# fvi1 = np.array([[0,1,2]])
-	# mesh1 = om.TriMesh(points1, fvi1)
-	
-	# points2 = np.array([[-1,0,0],[0,0,0],[0,1,0],[-0.5,0.5,0]])
-	# fvi2 = np.array([[0,1,2],[0,2,3]])
-	# mesh2 = om.TriMesh(points2, fvi2)
-	
-	# points3 = np.array([[1,0,0],[1,1,0],[0,1,0],[3,3,3]])
-	# fvi3 = np.array([[0,1,2]])
-	# mesh3 = om.TriMesh(points3, fvi3)
-	
-	# points4 = np.array([[-1,0,0],[0,1,0],[-1,1,0]])
-	# fvi4 = np.array([[0,1,2]])
-	# mesh4 = om.TriMesh(points4, fvi4)
-	
-	# vh_idx_to_sync = [np.array([0,1,2]), np.array([0,1,2]), np.array([3])]
-	# meshes = [mesh1, mesh2, mesh3]
-	
-	# data = hard_merge_meshes2(meshes, vh_idx_to_sync)
-	# print(data[1])
-	# print(data[0].points(),data[0].face_vertex_indices())
-	# mesh = data[0]
-	# mesh = hard_merge_meshes2(meshes)
-	
-	# print(mesh.points(), mesh.face_vertex_indices())
-	
-	#clean mesh tests:
-	
-	# points1 = np.array([[1,0,0],[0,1,0],[0,0,0],[1,0,0],[-1,0,0]])
-	# fvi1 = np.array([[0,1,2],[3,1,0],[2,1,4]])
-	# mesh1 = om.TriMesh(points1, fvi1)
-	# mesh =  soft_merge_meshes([mesh1, mesh2])
-	
-	# print(clean_mesh(mesh1))
-	
-	
-	#delete isolated_verices2 test:, clean test:
-	# points1 = np.array([[1,0,0],[2,2,2],[0,1,0],[0,0,0],[1,0,0],[-1,0,0],[3,3,3]])
-	# fvi1 = np.array([[0,2,3],[4,2,0],[3,2,5]])
-	# mesh1 = om.TriMesh(points1, fvi1)
-	
-	# data = clean_mesh(mesh1)
-	
-	# print(data.points(),data.face_vertex_indices())
-	#are points colinear tests:
-	# points = np.array([[0,0,0],[2,0,0],[4,0,0]])
-	# print(are_all_points_colinear(points))
-	
-	#stitch face2 tests:
-	
-	# points = np.array([[1,1,0],[1,-1,0],[-1,1,0],[-2,-2,0]])
-	# normal = np.array([0,0,1])
-	# mesh = stitch_face2(points, normal)
-	
-	# print(mesh.points(), mesh.face_vertex_indices())
-	
-	
-	#line_plane_inter3 debug:
-	# tp = np.array([[[11,6.5,7.5],[0,6.5,7.5],[0,6.5,10]]])
-	# pp = np.array([[[0.16342165,0,8.75],[0,4.95,10],[0.16342165,4.7095108,8.75]]])
-	# set = line_plane_inter3(tp,pp)
-	# print(set)
-	
-	# tp = np.append(tp, tp[:,0].reshape(-1,1,3), 1)
-	# pp = np.append(pp, pp[:,0].reshape(-1,1,3), 1)
-	# for tri in list(tp):
-		# ax.plot(tri[:,0],tri[:,1],tri[:,2], "green")
-
-	# for tri in list(pp):
-		# ax.plot(tri[:,0],tri[:,1],tri[:,2], "blue")
-	# ax.scatter(set[:,:,0],set[:,:,1],set[:,:,2], c="red")
-	
-	a = np.array([[[1,2,3],[4,5,2],[4,5,2]],[[8,8,8],[2,2,2],[8,8,8]]])
-	b = np.full((3,2,3),0)
-	print(a,b)
-	c = unique_close2(a,axis = 1).reshape(-1,2,3)
-	print(c)
-	b[[True,False,True]] = c
-	print(b)
 	plt.show()
-
+	# import matplotlib.pyplot as plt
+	# from mpl_toolkits.mplot3d import Axes3D
+	# fig = plt.figure()
+	# ax = fig.add_subplot(111, projection='3d')
+	# ax.set_xlabel("$X$")
+	# ax.set_ylabel("$Y$")
+	# ax.set_zlabel("$Z$")
 	
 	
 	
