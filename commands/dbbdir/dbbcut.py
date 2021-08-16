@@ -856,7 +856,7 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = False):
 	form_data = get_faces_near_block2(block_mesh, form_mesh, block_dims, block_position, form_mesh_avg_edge = form_mesh_avg_edge*0.75)
 	if form_data[0].size == 0:
 		return block_mesh
-	form_fh_idx_to_check = get_neigbour_faces2(form_data[0], form_mesh,block_dims, block_position ,n = 2)
+	form_fh_idx_to_check = get_neigbour_faces2(form_data[0], form_mesh,block_dims, block_position ,n = 8)
 	form_inside_vh_idx = form_data[1]
 	
 	
@@ -891,7 +891,7 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = False):
 	block_inside_vh_idx = np.where((block_points_form_segment_dist <= 0.0).all(-1))[0]	
 	prism_data1 = is_in_triangular_prism2(form_segment_tpoints, block_points, dist_tol = avg_block_dim*0.1)		#  return (return_fh_dict, return_dist_dict)
 	prism_fh_dict1 = prism_data1[0]
-	prism_data2 = is_in_triangular_prism2(block_tpoints, form_segment_points, dist_tol = form_mesh_avg_edge*0.01)		#  return (return_fh_dict, return_dist_dict)
+	prism_data2 = is_in_triangular_prism2(block_tpoints, form_segment_points, dist_tol = form_mesh_avg_edge*0.1)		#  return (return_fh_dict, return_dist_dict)
 	prism_fh_dict2 = prism_data2[0]
 	prism_dist_dict2 = prism_data2[1]
 	
@@ -1091,7 +1091,9 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = False):
 	else:
 		block_merge_mesh_list = []
 	for block_fh in list(block_fh_to_stitch):
-		points = unique_close2(block_data_dict[block_fh])
+		points = unique_close2(block_data_dict[block_fh]) # merganje
+		#points = block_data_dict[block_fh] #pp bez merganja
+
 		# print(points.shape)
 		# ax.scatter(points[:,0],points[:,1],points[:,2], c = "red")
 	

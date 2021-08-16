@@ -3,7 +3,7 @@ import os
 import numpy as np
 import copy
 import csv
-import dbbdir.myfunctions as mf
+import dbbdir.dbbcut as mf
 from hullformdir.hullform import HullForm
 #d3v imports
 from extendedgeometry import ExtendedGeometry
@@ -336,7 +336,7 @@ class DBBBase(DBBBaseAll):
 
 	def regenerateMesh(self):
 		self._genMesh()
-		#self._cutMesh(self.deck_hull.mesh)
+		self._cutMesh(self.deck_hull.mesh)
 		if self.is_closed():
 			self._volume = self.calc_volume()
 		else:
@@ -346,9 +346,9 @@ class DBBBase(DBBBaseAll):
 		self.mesh = mf.make_block(block_dims=self.size, move_vector=self.position)
 
 	def _cutMesh(self, cutting_mesh:om.TriMesh):  # za sada ako je position po y + a block dims po y neg nece radit
-		cut_mesh = mf.cut_mesh2(self.mesh, cutting_mesh, self.size, self.position)
-		# if cut_mesh is not None:
-		self.mesh = cut_mesh
+		if cutting_mesh.n_faces() > 0:
+			cut_mesh = mf.cut_mesh2(self.mesh, cutting_mesh, self.size, self.position)
+			self.mesh = cut_mesh
 		pass
 
 	def calc_volume(self):
