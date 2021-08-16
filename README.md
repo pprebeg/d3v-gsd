@@ -28,6 +28,7 @@ d3v-gsd (Design visualizer for General ship design)
 Erhardt, Luka Josip (UNIZAG FSB, student)  
 Igrec, Bojan (UCL, PhD student)  
 Munic, Ivan (UNIZAG FSB, researcher on project)  
+Orec Ivan (UNIZAG FSB, student)
 Pavlovic, Tomislav (UNIZAG FSB, student)  
 Prebeg, Pero(UNIZAG FSB, associated professor)  
 

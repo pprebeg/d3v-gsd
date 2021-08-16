@@ -10,6 +10,9 @@ from iohandlers import IOHandler
 from signals import Signals
 from geometry import Geometry
 
+
+from typing import Set,Dict,List
+
 # import matplotlib.pyplot as plt
 
 class HullFormMeshQuality:
@@ -64,9 +67,15 @@ class HullForm(Geometry):
     def __init__(self, fileName):
         super().__init__()
         self.filename = fileName
+        self.shipdata = {}
+        self.pdecks =[]
+        self.pbulkheads = []
         self.hfmq = HullFormMeshQuality()
-        self.shipdata,self.pdecks,self.pbulkheads,self.dict_decks = self.readShipData()
-
+        results = self.readShipData()
+        self.shipdata = results[0]
+        self.pdecks = results[1]
+        self.pbulkheads = results[2]
+        self.dict_decks = results[3]
         self.h = []  # positive y waterlines
         self.wlinesNeg = []  # negative y waerlines
         self.wlKeel = []  # keel waterline (one waterline)
@@ -74,9 +83,6 @@ class HullForm(Geometry):
 
     def generateMesh(self):
 
-        hmax=self.pdecks[0]
-        #hmax=9.4
-        #wlPos=self.hfmq.genWLPositions(hmax, 0)
         transomTip = self.shipdata["draft_val"] * self.shipdata["td_val"]
         obligatoryWL= []
         for dh in self.pdecks:
@@ -85,7 +91,6 @@ class HullForm(Geometry):
         obligatoryWL.sort(reverse=True)
 
         wlPos = self.hfmq.genWLPositionsUsingObligatory(obligatoryWL)
-        #results = self.hullGen(self.shipdata, wlPos, self.hfmq.numPointsWLhalf)
         lines = self.hullGen(self.shipdata, wlPos, self.hfmq.numPointsWLhalf)
         self.wlinesPos = lines[0]  # positive y waterlines
         self.wlinesNeg = lines[1]  # negative y waerlines
@@ -93,15 +98,19 @@ class HullForm(Geometry):
         self.mesh = self.genHullFormMeshPP(lines)
         pass
 
+    def getResults(self,h,seaDensity):
+        tsStart = time.perf_counter() #početak mjerenja vremena
 
-    def getResultsOld(self,h,seaDensity):
-        tsStart = time.perf_counter()
-        results = []
         fvs = self.mesh.fv_indices().tolist()
         points = self.mesh.points().tolist()
-        xmf = 50
-        # h=9
-        bcwl = self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs,points)
+        mesh2calcWl=self.get_tria_for_calculation(fvs,points,h)
+        fvs2calcWl=mesh2calcWl[0]
+        points2calcWl=mesh2calcWl[1]
+        xmf = self.shipdata["loa_val"]/2
+        tMesh=time.perf_counter()
+        t1=tMesh-tsStart
+
+        bcwl=self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs2calcWl,points2calcWl)
         h = bcwl[0]
         volume = bcwl[1]
         area = bcwl[2]
@@ -110,83 +119,34 @@ class HullForm(Geometry):
         KBx = bcwl[5]
         Ib = bcwl[6]
         Il = bcwl[7]
-        Lwl = bcwl[8]
-        Bwl = bcwl[9]
-        mfarea = bcwl[10]
+        #Swet = bcwl[8]
+        #print("Swet:",Swet)
+        tBcwl = time.perf_counter()
+        t2=tBcwl-tMesh
+        Lwl, Bwl = self.getLwlBwl(h, fvs2calcWl, points2calcWl)
+        mfarea = self.getMainFrameArea(xmf, h, fvs2calcWl, points2calcWl)
+        hsdata = self.getHydrostaticData(seaDensity, h, volume, area, Ib, Il, KBz, Lwl, 2 * Bwl, mfarea)
 
+        results= bcwl+hsdata
+        tHSdata = time.perf_counter()
+        dtAll = tHSdata - tsStart
+        t3=tHSdata-tBcwl
+        """print("num_triuk", len(fvs))
+        print("num_tria", len(fvs2calcWl))
+        print("Hydrostatic results calc timeMesh:", t1)
+        print("Hydrostatic results calc timeBCWL:", t2)
+        print("Hydrostatic results calc timeHSdata:", t3)
 
-        hsdata = self.getHydrostaticData(seaDensity,h,volume,area,Ib, Il,KBz,Lwl,Bwl,mfarea)
-        dtAll = time.perf_counter() - tsStart
-        print("Hydrostatic results calc time:", dtAll)
-        results = bcwl+hsdata
-        print(results)
-        return results
-
-    def getResults(self, h, seaDensity):
-        indMet = 0
-        if indMet == 0:
-            return self.getResultsOrec()
-        if indMet == 1:
-            return self.getResultsErh()
-
-    def getResultsOrec(self,h,seaDensity):
-        tsStart = time.perf_counter()
-        results = []
-        if not self.mesh.has_face_normals():
-            self.mesh.request_face_normals()
-        fvs = self.mesh.fv_indices()
-        points = self.mesh.points()
-        normals = self.mesh.face_normals()
-        xmf = 50
-        # h=9
-        bcwl = self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs,points)
-        h = bcwl[0]
-        volume = bcwl[1]
-        area = bcwl[2]
-        Xwl = bcwl[3]
-        KBz = bcwl[4]
-        KBx = bcwl[5]
-        Ib = bcwl[6]
-        Il = bcwl[7]
-        Lwl,Bwl = self.getLwlBwl(h,fvs,points)
-        mfarea = self.getMainFrameArea(xmf, h, fvs, points)
-        hsdata = self.getHydrostaticData(seaDensity,h,volume,area,Ib,Il,KBz,Lwl,2*Bwl,mfarea)
-        dtAll = time.perf_counter() - tsStart
-        print("Hydrostatic results calc time:", dtAll)
-        results = bcwl+hsdata
-        print(results)
-        return results
-
-    def getResultsErh(self,h,seaDensity):
-        tsStart = time.perf_counter()
-        results = []
-        if not self.mesh.has_face_normals():
-            self.mesh.request_face_normals()
-        fvs = self.mesh.fv_indices()
-        points = self.mesh.points()
-        normals = self.mesh.face_normals()
-        xmf = 50
-        # h=9
-        bcwl = self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs,points)
-        h = bcwl[0]
-        volume = bcwl[1]
-        area = bcwl[2]
-        Xwl = bcwl[3]
-        KBz = bcwl[4]
-        KBx = bcwl[5]
-        Ib = bcwl[6]
-        Il = bcwl[7]
-        Lwl,Bwl = self.getLwlBwl(h,fvs,points)
-        mfarea = self.getMainFrameArea(xmf, h, fvs, points)
-        hsdata = self.getHydrostaticData(seaDensity,h,volume,area,Ib,Il,KBz,Lwl,2*Bwl,mfarea)
-        dtAll = time.perf_counter() - tsStart
-        print("Hydrostatic results calc time:", dtAll)
-        results = bcwl+hsdata
-        print(results)
+        print("Hydrostatic results calc time:", dtAll)"""
+        timeuk=t1,t2,t3,dtAll
+        print("time:",timeuk)
+        print("Results:",results)
+        print()
         return results
 
     def getMainFrameArea(self,x,h,fvs,points):
         mfpoints = self.getSortedPointsOnAxisAlignedPlane(x, fvs, points, 0)
+        mfa=[]
         area=0
         a = len(mfpoints)
         for i in range(0,a-2,1):
@@ -196,12 +156,24 @@ class HullForm(Geometry):
                 b2 = mfpoints[i+2][1]
                 if h1<=h and h2<=h:
                     area = area + 1/2*abs(h2-h1)*(abs(b1)+abs(b2))
+                    #mfa.append(1/2*abs(h2-h1)*(abs(b1)+abs(b2)))
                 if h2>h and h1<h:
                     point = self.getIntersectionPoint(mfpoints[i+2],mfpoints[i],h,2)
                     H2 = point[2]
                     area = area + 1/2*abs(H2-h1)*(abs(b1)+abs(b2))
+                    #mfa.append(1 / 2 * abs(h2 - h1) * (abs(b1) + abs(b2)))
 
-        return area
+        return 2*area #,np.array(mfa)
+
+    def getLwlBwl(self, h, fvs, points):
+        wlpoints = self.getSortedPointsOnAxisAlignedPlane(h, fvs, points, 2)
+        wlpoints = sorted(wlpoints, key=lambda p: p[1])
+        Bwl = wlpoints[-1][1]-wlpoints[0][1]
+
+        wlpoints = sorted(wlpoints, key=lambda p: p[0])
+
+        Lwl = wlpoints[-1][0] - wlpoints[0][0]
+        return Lwl, Bwl
 
     def getSortedPointsOnAxisAlignedPlane(self, x, fvs, points, os):
         mfpoints=[]
@@ -217,7 +189,7 @@ class HullForm(Geometry):
                 elif p[os] > x:
                     lpr.append(iv)
                 else:
-                    mfpoints.append(p)
+                        mfpoints.append(p)
 
             if len(lpl)>0 and len(lpr) > 0:
                 if len(lpl) < len(lpr):
@@ -239,11 +211,12 @@ class HullForm(Geometry):
         mfpoints = mftemp
 
         mfpoints = sorted(mfpoints, key=lambda p: p[2])
+
         return mfpoints
 
     def getHydrostaticData(self,seaDensity,h,volume,area,Ib, Il, KBz,Lwl,Bwl,mfarea):
 
-        MoB = Ib / volume
+        MoB =Ib / volume
         KMo = MoB + KBz
         MlB = Il / volume
         KMl = MlB + KBz
@@ -258,537 +231,45 @@ class HullForm(Geometry):
         CX = mfarea / (Bwl * h)
         return KMo, KMl, JZ, M1, delta, Cwl, CB, CP, CX
 
-    def getHydrostaticDataOld(self,seaDensity,h,volume,area,Ib, Il, KBz,Lwl,Bwl,mfarea):
-
-        MoB = Ib / volume
-        KMo = MoB + KBz
-        MlB = Il / volume
-        KMl = MlB + KBz
-        JZ = 0.01 * area * seaDensity
-
-        Cwl = area / (Lwl * Bwl)
-        CB = volume / (Lwl * Bwl * h)
-
-        CP = volume / (mfarea * Lwl)
-        CX = mfarea / (Bwl * h)
-        # results = [MoB,KMo,MlB,KMl,JZ,Cwl,CB,CP,CX]
-
-        return MoB,KMo,MlB,KMl,JZ,Cwl,CB,CP,CX
-
-    def getLwlBwl(self, h, fvs, points):
-        wlpoints = self.getSortedPointsOnAxisAlignedPlane(h, fvs, points, 2)
-        wlpoints = sorted(wlpoints, key=lambda p: p[1])
-        Bwl = wlpoints[-1][1]-wlpoints[0][1]
-
-        wlpoints = sorted(wlpoints, key=lambda p: p[0])
-
-        Lwl = wlpoints[-1][0] - wlpoints[0][0]
-        return Lwl, Bwl
-
-    def getBasicDataUsingTrianglesProjectedToWaterline(self, h, x, fvs, points):
-        mesh = self.mesh
-        lpowl = []
-        lpbwl = []
-        Ib = 0
-        KBz = 0
-        KBx = 0
-        vol = 0
-        Awl = 0
-        Xwl = 0
-        Swet=0
-        p = []
-        r = []
-        cgTriaMid = []
-        a = self.getXwl(h)
-        for fh in fvs:  # facet handle
-            p.clear()
-            r.clear()
-            cgTriaMid.clear()
-            lpowl.clear()
-            lpbwl.clear()
-            i = 0
-            for vh in fh:  # vertex handle
-                p.append(points[vh])
-                if p[i][2] > h:
-                    lpowl.append(i)
-
-                else:
-                    lpbwl.append(i)
-                i = i + 1
-            if len(lpowl) < 1:
-                # A
-                # Ax = points[fvs[fh][0]][0]
-                Ax = p[0][0]
-                Ay = p[0][1]
-                Az = p[0][2]
-                # B
-                Bx = p[1][0]
-                By = p[1][1]
-                Bz = p[1][2]
-                # C
-                Cx = p[2][0]
-                Cy = p[2][1]
-                Cz = p[2][2]
-                areaXYPlane = self.calcArea2DTria(Ax, Ay, Bx, By, Cx, Cy)
-                area3D = self.calcAreaTria3D(p[0],p[1],p[2])
-                Swet+=area3D
-
-                av = self.calcTriaAreaVector(p[0],p[1],p[2])
-                area = np.linalg.norm(av)
-                zvec = np.array([0,0,1])
-                area2d =  np.dot(av,zvec)
-                area2d = np.dot(np.linalg.norm(av), zvec)*area
-                # Volume
-                hA = h - Az
-                hB = h - Bz
-                hC = h - Cz
-                vol = vol + 1 / 3 * abs(areaXYPlane) * (hA + hB + hC)
-
-                # Ib Il
-                r.append(self.TezisteTrokuta(Ax, Ay, h, Bx, By, h, Cx, Cy, h))
-                Ib = Ib + r[0][1] ** 2 * areaXYPlane
-
-                # Kbz, KBx
-                hsr = (Az + Bz + Cz) / 3
-                cgTriaMid.append(self.TezisteTrokuta(Ax, Ay, (h - hsr), Bx, By, (h - hsr), Cx, Cy, (h - hsr)))
-                KBz = KBz + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (
-                        hsr + (h - hsr) / 2)
-                KBx = KBx + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (
-                    cgTriaMid[0][0])
-
-                # Awl
-                area = self.calcArea2DTria(Ax, Ay, Bx, By, Cx, Cy)
-
-                # Xwl
-                Xwl = Xwl + (r[0][0] * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))))
-
-                pass
-            elif len(lpowl) == 1:
-                # 2 trokuta Ib, Il i Xwl
-                lip = self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]], h, 2)
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0],
-                                             p[lpbwl[1]][1], h))
-                Ib = Ib + r[0][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
-                                                             p[lpbwl[1]][1])
-
-                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
-                                                          p[lpbwl[1]][1])
-
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0],
-                                             p[lpbwl[0]][1], h))
-                Ib = Ib + r[1][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1],
-                                                             p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                Xwl = Xwl + r[1][0] * self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1],
-                                                          p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                # Kbz, KBx
-                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0],
-                                                     p[lpbwl[1]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
-                                                p[lpbwl[1]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0],
-                                                p[lpbwl[1]][1]) * (h - hsr) * (cgTriaMid[0][0])
-
-                hsr = (lip[0][2] + p[lpbwl[1]][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(
-                    self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0],
-                                        p[lpbwl[0]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0],
-                                                p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0],
-                                                p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
-
-                # Volume
-                area1 = self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[0]][0], p[lpbwl[0]][1], p[lpbwl[1]][0],
-                                            p[lpbwl[1]][1])
-                area2 = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-                areaXYPlane = area1 + area2
-
-                vol = vol + 1 / 3 * (h - p[lpbwl[0]][2] + h - p[lpbwl[1]][2]) * area1
-                vol = vol + 1 / 3 * (h - p[lpbwl[1]][2]) * area2
-
-                area3D = self.calcAreaTria3D(lip[0], lpbwl[0], lpbwl[1]) + self.calcAreaTria3D(lip[0], lip[1], lpbwl[1])
-                Swet += area3D
-                # Awl
-                area = area1 + area2
-
-                pass
-            elif len(lpowl) == 2:
-                # 1 trokut Ib, Il
-                lip = self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]], h, 2)
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[0]][0],
-                                             p[lpbwl[0]][1], h))
-                Ib = Ib + r[0][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
-                                                             p[lpbwl[0]][1])
-
-                # KBz, KBx
-                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[0]][0],
-                                                     p[lpbwl[0]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
-                                                p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
-                                                p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
-
-                # Volume
-                areaXYPlane = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
-                                                  p[lpbwl[0]][1])
-
-                vol = vol + 1 / 3 * (h - p[lpbwl[0]][2]) * areaXYPlane
-
-                area3D = self.calcAreaTria3D(lip[0], lip[1], lpbwl[0])
-                Swet += area3D
-
-                # Awl
-                area = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                # Xwl
-                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],
-                                                          p[lpbwl[0]][1])
-
-                pass
-            else:
-                area = 0
-            Awl = Awl + area
-
-        Xwl = Xwl / Awl
-        Il = float(self.getIl(h, Xwl))
-        KBz = KBz / vol
-        KBx = KBx / vol
-        #Lwl, Bwl = self.getLwlBwl(h, fvs, points)
-        #mfarea = self.getMainFrameArea(x, h, fvs, points)
-
-        # dodati Swet u izlaz
-        return h, 2 * vol, 2 * Awl, Xwl, KBz, KBx, 2 * Ib, 2 * Il
-
-    def getBasicDataUsingTrianglesProjectedToWaterlineOld(self,h,x,fvs,points):
-        mesh = self.mesh
-        lpowl = []
-        lpbwl = []
-        Ib = 0
-        KBz = 0
-        KBx = 0
-        vol = 0
-        Awl = 0
-        Xwl = 0
-        p = []
-        r = []
-        cgTriaMid = []
-        a = self.getXwl(h)
-        for fh in fvs:  # facet handle
-            p.clear()
-            r.clear()
-            cgTriaMid.clear()
-            lpowl.clear()
-            lpbwl.clear()
-            i = 0
-            for vh in fh:  # vertex handle
-                p.append(points[vh])
-                if p[i][2] > h:
-                    lpowl.append(i)
-
-                else:
-                    lpbwl.append(i)
-                i = i + 1
-            if len(lpowl) < 1:
-                # A
-                #Ax = points[fvs[fh][0]][0]
-                Ax = p[0][0]
-                Ay = p[0][1]
-                Az = p[0][2]
-                # B
-                Bx = p[1][0]
-                By = p[1][1]
-                Bz = p[1][2]
-                # C
-                Cx = p[2][0]
-                Cy = p[2][1]
-                Cz = p[2][2]
-                areaXYPlane = self.calcArea2DTria(Ax, Ay, Bx, By, Cx, Cy)
-
-                # Volume
-                hA = h - Az
-                hB = h - Bz
-                hC = h - Cz
-                vol = vol + 1 / 3 * abs(areaXYPlane) * (hA + hB + hC)
-
-                # Ib Il
-                r.append(self.TezisteTrokuta(Ax, Ay, h, Bx, By, h, Cx, Cy, h))
-                Ib = Ib + r[0][1] ** 2 * areaXYPlane
-
-                #Kbz, KBx
-                hsr = (Az + Bz + Cz) / 3
-                cgTriaMid.append(self.TezisteTrokuta(Ax, Ay, (h - hsr), Bx, By, (h - hsr), Cx, Cy, (h - hsr)))
-                KBz = KBz + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (
-                            hsr + (h - hsr) / 2)
-                KBx = KBx + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (
-                cgTriaMid[0][0])
-
-                #Awl
-                area = self.calcArea2DTria(Ax,Ay,Bx,By,Cx,Cy)
-
-                #Xwl
-                Xwl = Xwl + (r[0][0] * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))))
-
-                pass
-            elif len(lpowl) == 1:
-                # 2 trokuta Ib, Il i Xwl
-                lip = self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]], h, 2)
-                r.append(self.TezisteTrokuta(lip[0][0],lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h))
-                Ib = Ib + r[0][1] ** 2 * self.calcArea2DTria(lip[0][0],lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-
-                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                Ib = Ib + r[1][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1],p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                Xwl = Xwl + r[1][0] * self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                #Kbz, KBx
-                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[1]][0],p[lpbwl[1]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[1]][0],p[lpbwl[1]][1])* (h - hsr) * (cgTriaMid[0][0])
-
-                hsr = (lip[0][2] + p[lpbwl[1]][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0], p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0], p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
-
-                #Volume
-                area1 = self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[0]][0], p[lpbwl[0]][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-                area2 = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-                areaXYPlane = area1 + area2
-                vol = vol + 1 / 3 * (h - p[lpbwl[0]][2] + h - p[lpbwl[1]][2]) * area1
-                vol = vol + 1 / 3 * (h - p[lpbwl[1]][2]) * area2
-
-                # Awl
-                area = area1 + area2
-
-                pass
-            elif len(lpowl) == 2:
-                # 1 trokut Ib, Il
-                lip = self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]], h, 2)
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                Ib = Ib + r[0][1] ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                #KBz, KBx
-                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
-
-                #Volume
-                areaXYPlane = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-                vol = vol + 1 / 3 * (h - p[lpbwl[0]][2]) * areaXYPlane
-
-                #Awl
-                area = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                #Xwl
-                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                pass
-            else:
-                area = 0
-            Awl = Awl + area
-
-        Xwl = Xwl / Awl
-        Il = self.getIl(h, Xwl)
-        KBz = KBz / vol
-        KBx = KBx / vol
-        Lwl,Bwl = self.getLwlBwl(h,fvs,points)
-        mfarea = self.getMainFrameArea(x,h,fvs,points)
-
-        return h, vol, Awl, Xwl, KBz, KBx, Ib, Il, Lwl, Bwl, mfarea
-
-    def getIl(self,h, Xwl):
-        mesh = self.mesh
-        lpowl = []
-        lpbwl = []
-        Il = 0
-        p = []
-        r = []
-        a = Xwl
-        for fh in mesh.faces():  # facet handle
-            p.clear()
-            r.clear()
-            lpowl.clear()
-            lpbwl.clear()
-            i = 0
-            for vh in mesh.fv(fh):  # vertex handle
-                p.append(mesh.point(vh))
-                if p[i][2] > h:
-                    lpowl.append(i)
-
-                else:
-                    lpbwl.append(i)
-                i = i + 1
-            if len(lpowl) < 1:
-                # A
-                Ax = p[0][0]
-                Ay = p[0][1]
-                # B
-                Bx = p[1][0]
-                By = p[1][1]
-                # C
-                Cx = p[2][0]
-                Cy = p[2][1]
-                r.append(self.TezisteTrokuta(Ax, Ay, h, Bx, By, h, Cx, Cy, h))
-                Il = Il + (r[0][0] - a) ** 2 * self.calcArea2DTria(Ax, Ay, Bx, By, Cx, Cy)
-                pass
-            elif len(lpowl) == 1:
-                # 2 trokuta
-                lip = self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]], h, 2)
-                r.append(self.TezisteTrokuta(lip[0][0],lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h))
-                Il = Il + (r[0][0] - a) ** 2 * self.calcArea2DTria(lip[0][0],lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                Il = Il + (r[1][0] - a) ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1],p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-
-                pass
-            elif len(lpowl) == 2:
-                # 1 trokut
-                lip = self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]], h, 2)
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                Il = Il + (r[0][0] - a) ** 2 * self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-                pass
-
-
-        return Il
-
-    def getKBzKBx(self, h):
-        mesh = self.mesh
-        lpowl=[]
-        KBx=0
-        KBz=0
-        lpbwl = []
-        p = []
-        cgTriaMid = []
-        for fh in mesh.faces():  # facet handle
-            p.clear()
-            lpowl.clear()
-            lpbwl.clear()
-
-            cgTriaMid.clear()
-            i=0
-            for vh in mesh.fv(fh):  # vertex handle
-                p.append(mesh.point(vh))
-                if p[i][2] > h :
-                    lpowl.append(i)
-
-                else:
-                    lpbwl.append(i)
-                i=i+1
-            if len(lpowl) < 1:
-                # A
-                Ax = p[0][0]
-                Ay = p[0][1]
-                Az = p[0][2]
-                # B
-                Bx = p[1][0]
-                By = p[1][1]
-                Bz = p[1][2]
-                # C
-                Cx = p[2][0]
-                Cy = p[2][1]
-                Cz = p[2][2]
-
-                hsr = (Az + Bz + Cz) / 3
-                cgTriaMid.append(self.TezisteTrokuta(Ax, Ay, (h - hsr), Bx, By, (h - hsr), Cx, Cy, (h - hsr)))
-                KBz = KBz + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))) * (h - hsr) * (cgTriaMid[0][0])
-
-                pass
-            elif len(lpowl) ==1:
-                # 2 trokuta
-                lip=self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]], h,2)
-                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[1]][0],p[lpbwl[1]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[1]][0],p[lpbwl[1]][1])* (h - hsr) * (cgTriaMid[0][0])
-
-                hsr = (lip[0][2] + p[lpbwl[1]][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0], p[lpbwl[1]][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0], p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[1]][0], p[lpbwl[1]][1], p[lpbwl[0]][0], p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
-                pass
-            elif len(lpowl) ==2:
-                # 1 trokut
-                lip=self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]],h,2)
-                hsr = (lip[0][2] + lip[1][2] + p[lpbwl[0]][2]) / 3
-                cgTriaMid.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h,lip[1][0], lip[1][1], h, p[lpbwl[0]][0],p[lpbwl[0]][1], h))
-                KBz = KBz + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],p[lpbwl[0]][1]) * (h - hsr) * (hsr + (h - hsr) / 2)
-                KBx = KBx + self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[0]][0],p[lpbwl[0]][1]) * (h - hsr) * (cgTriaMid[0][0])
-                pass
-
-        KBz = KBz / self.getVolume(h)
-        KBx = KBx / self.getVolume(h)
-        return KBz, KBx
-
-    def TezisteTrokuta(self, Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz):
-
-        Xcm = (Ax + Bx + Cx) / 3
-        Ycm = (Ay + By + Cy) / 3
-        Zcm = (Az + Bz + Cz) / 3
-
-        return Xcm, Ycm, Zcm
-
-    def getXwl(self, h):
-        mesh = self.mesh
-        lpowl=[]
-        Xwl= 0
-        lpbwl = []
-        p = []
-        for fh in mesh.faces():  # facet handle
-            p.clear()
-            lpowl.clear()
-            lpbwl.clear()
-            r = []
-            r.clear()
-            i=0
-            for vh in mesh.fv(fh):  # vertex handle
-                p.append(mesh.point(vh))
-                if p[i][2] > h :
-                    lpowl.append(i)
-
-                else:
-                    lpbwl.append(i)
-                i=i+1
-            if len(lpowl) < 1:
-                # A
-                Ax = p[0][0]
-                Ay = p[0][1]
-                # B
-                Bx = p[1][0]
-                By = p[1][1]
-                # C
-                Cx = p[2][0]
-                Cy = p[2][1]
-
-                r.append(self.TezisteTrokuta(Ax, Ay, h, Bx, By, h, Cx, Cy, h))
-                Xwl = Xwl + (r[0][0] * abs(1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))))
-
-                pass
-            elif len(lpowl) ==1:
-                # 2 trokuta
-                lip=self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]],h,2)
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, lip[1][0], lip[1][1], h,p[lpbwl[1]][0] , p[lpbwl[1]][1], h))
-                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[1]][0],p[lpbwl[1]][1])
-
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h, p[lpbwl[1]][0] , p[lpbwl[1]][1], h, p[lpbwl[0]][0], p[lpbwl[0]][1], h))
-                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0],lip[0][1] ,p[lpbwl[1]][0],p[lpbwl[1]][1], p[lpbwl[0]][0],p[lpbwl[0]][1])
-                pass
-            elif len(lpowl) ==2:
-                # 1 trokut
-                lip=self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]],h,2)
-                r.append(self.TezisteTrokuta(lip[0][0], lip[0][1], h,lip[1][0], lip[1][1], h, p[lpbwl[0]][0],p[lpbwl[0]][1], h))
-                Xwl = Xwl + r[0][0] * self.calcArea2DTria(lip[0][0], lip[0][1],lip[1][0], lip[1][1], p[lpbwl[0]][0], p[lpbwl[0]][1])
-                pass
-        Xwl = Xwl / self.getAwl(h)
-        return Xwl
+    def getBasicDataUsingTrianglesProjectedToWaterline(self,h,xmf,fvs,points):
+        fvs=np.array(fvs)
+        points=np.array(points)
+        k_vec = np.zeros((3))
+
+        k_vec[2]=-1
+        norm_vec, teziste = self.calc_area_cg_vector_all_tria(fvs, points)
+
+        # area
+        areaXYPlane = np.dot(norm_vec, k_vec)
+        area3D = np.linalg.norm(norm_vec,axis=1)
+
+
+        # Area
+        Swet=area3D.sum()
+        Awl =float(areaXYPlane.sum())
+
+        # Volume
+        dh =h-teziste[:,2]
+        vol=areaXYPlane*dh
+        Vol=float(vol.sum())
+
+        # Xwl
+        Xwl = teziste[:, 0] * areaXYPlane
+        Xwl=float(Xwl.sum()/Awl)
+
+        # Ib Il
+        Ib = teziste[:,1] ** 2 * areaXYPlane
+        Il = (teziste[:,0] - Xwl) ** 2 * areaXYPlane
+        Ib=float(np.sum(Ib))
+        Il = float(np.sum(Il))
+
+        # Kbz, KBx
+        KBz =areaXYPlane * dh * (teziste[:,2] + dh / 2)
+        KBx =areaXYPlane * dh * (teziste[:,0])
+        KBz = float(KBz.sum()/Vol)
+        KBx=float(KBx.sum()/Vol)
+
+        return h, 2 * Vol, 2 * Awl, Xwl, KBz, KBx, 2 * Ib, 2 * Il #,Swet
 
     def getIntersectionPoints(self, p1,p2,p3,h, os):
         ip1 = self.getIntersectionPoint(p1,p2,h, os)
@@ -805,131 +286,23 @@ class HullForm(Geometry):
 
         return ip1
 
-    def getAwl(self, hvl):
-        mesh = self.mesh
-        h = hvl
-        Awl = 0
-        lpowl=[]
-        lpbwl = []
-        p = []
-        for fh in mesh.faces():  # facet handle
-            p.clear()
-            lpowl.clear()
-            lpbwl.clear()
-            i=0
-            for vh in mesh.fv(fh):  # vertex handle
-                p.append(mesh.point(vh))
-                if p[i][2] > h :
-                    lpowl.append(i)
-
-                else:
-                    lpbwl.append(i)
-                i=i+1
-            if len(lpowl) < 1:
-                # A
-                Ax = p[0][0]
-                Ay = p[0][1]
-                # B
-                Bx = p[1][0]
-                By = p[1][1]
-                # C
-                Cx = p[2][0]
-                Cy = p[2][1]
-                area = self.calcArea2DTria(Ax,Ay,Bx,By,Cx,Cy)
-                pass
-            elif len(lpowl) ==1:
-                # 2 trokuta
-                lip=self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]],h,2)
-                area1 = self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[0]][0], p[lpbwl[0]][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-                area2 = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-                area = area1+area2
-                pass
-            elif len(lpowl) ==2:
-                # 1 trokut
-                lip=self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]],h,2)
-                area = self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[0]][0],p[lpbwl[0]][1])
-                pass
-            else:
-                area = 0
-            Awl = Awl + area
-        return Awl
-
-    def calcArea2DTria(self,Ax,Ay,Bx,By,Cx,Cy):
-        area = 1 / 2 * (Ax * (By - Cy) + Bx * (Cy - Ay) + Cx * (Ay - By))
-        return abs(area)
-
-    def calcAreaTria2Dxy(self,p1,p2,p3):
-        return self.calcAreaTria3D(p1[0:2],p2[0:2],p3[0:2])
-
-    def calcAreaTria3D(self,p1,p2,p3):
-        p1p2= np.subtract(p2,p1)
+    def calc_area_cg_vector_all_tria(self, fvs: np.ndarray, points: np.ndarray) :
+        num_tria = len(fvs)
+        p1 = np.zeros((num_tria, 3))
+        p2 = np.zeros((num_tria, 3))
+        p3 = np.zeros((num_tria, 3))
+        i = 0
+        for vt in fvs:
+            p1[i] = points[vt[0]]
+            p2[i] = points[vt[1]]
+            p3[i] = points[vt[2]]
+            i += 1
+        p1p2 = np.subtract(p2, p1)
         p1p3 = np.subtract(p3, p1)
-        u=np.cross(p1p2,p1p3)
-        return np.linalg.norm(u)/2
+        u = np.cross(p1p2, p1p3)
+        cg = (p1 + p2 + p3) / 3
 
-    def calcTriaAreaVector(self,p1,p2,p3):
-        p1p2= np.subtract(p2,p1)
-        p1p3 = np.subtract(p3, p1)
-        u=np.cross(p1p2,p1p3)
-        return u/2
-
-    def getVolume(self, h):
-        mesh = self.mesh
-        vol =0
-        lpowl=[]
-        lpbwl = []
-        p = []
-        for fh in mesh.faces():  # facet handle
-            p.clear()
-            lpowl.clear()
-            lpbwl.clear()
-            i=0
-            for vh in mesh.fv(fh):  # vertex handle
-                p.append(mesh.point(vh))
-                if p[i][2] > h :
-                    lpowl.append(i)
-
-                else:
-                    lpbwl.append(i)
-                i=i+1
-            if len(lpowl) < 1:
-                # A
-                Ax = p[0][0]
-                Ay = p[0][1]
-                # B
-                Bx = p[1][0]
-                By = p[1][1]
-                # C
-                Cx = p[2][0]
-                Cy = p[2][1]
-                areaXYPlane = self.calcArea2DTria(Ax,Ay,Bx,By,Cx,Cy)
-                Az = p[0][2]
-                Bz = p[1][2]
-                Cz = p[2][2]
-                hA = h - Az
-                hB = h - Bz
-                hC = h - Cz
-                vol = vol + 1/3* abs(areaXYPlane) * (hA + hB + hC)
-                pass
-            elif len(lpowl) ==1:
-                # 2 trokuta
-                lip=self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]],h,2)
-                area1 = self.calcArea2DTria(lip[0][0], lip[0][1], p[lpbwl[0]][0], p[lpbwl[0]][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-                area2 = self.calcArea2DTria(lip[0][0], lip[0][1], lip[1][0], lip[1][1], p[lpbwl[1]][0], p[lpbwl[1]][1])
-                areaXYPlane = area1+area2
-                vol = vol + 1/3*(h-p[lpbwl[0]][2]+h-p[lpbwl[1]][2])*area1
-                vol = vol + 1 / 3 * (h - p[lpbwl[1]][2]) * area2
-                pass
-            elif len(lpowl) ==2:
-                # 1 trokut
-                lip=self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]],h,2)
-                areaXYPlane = self.calcArea2DTria(lip[0][0],lip[0][1] ,lip[1][0],lip[1][1], p[lpbwl[0]][0],p[lpbwl[0]][1])
-                vol = vol + 1/3*(h-p[lpbwl[0]][2])*areaXYPlane
-                pass
-            else:
-                areaXYPlane = 0
-        return vol
-
+        return u/2,cg
 
     # kod za formu
     def genHullFormMesh(self, lines: list):
@@ -982,6 +355,65 @@ class HullForm(Geometry):
 
         return mesh
 
+    def get_tria_for_calculation(self, fvs, points, h):
+        new_points = points
+        new_tria = []
+
+        lpbwl = []
+        lpowl = []
+        p = []
+        for fh in fvs:  # facet handle
+            p.clear()
+            lpowl.clear()
+            lpbwl.clear()
+            i = 0
+            lip = []
+            for vh in fh:  # vertex handle
+                p.append(points[vh])
+                if p[i][2] > h:
+                    lpowl.append(i)
+                else:
+                    lpbwl.append(i)
+                i = i + 1
+
+            #
+
+            if len(lpowl) == 0:
+                new_tria.append(fh)
+
+            if len(lpowl) == 1:
+                lip = self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]], h, 2)
+                n = len(new_points)
+                new_points.append(lip[0])
+                new_points.append(lip[1])
+                if lpowl[0]==1:
+                    fh_new = np.array([n, n + 1, fh[lpbwl[1]]])
+                    new_tria.append(fh_new)
+                    fh_new = np.array([n, fh[lpbwl[1]],fh[lpbwl[0]]])
+                    new_tria.append(fh_new)
+
+
+                else:
+                    fh_new = np.array([n, fh[lpbwl[1]], n + 1])
+                    new_tria.append(fh_new)
+                    fh_new = np.array([n, fh[lpbwl[0]], fh[lpbwl[1]]])
+                    new_tria.append(fh_new)
+
+            if len(lpowl) == 2:
+                lip = self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]], h, 2)
+                n = len(new_points)
+                new_points.append(lip[0])
+                new_points.append(lip[1])
+                if lpbwl[0] == 1:
+                    fh_new = np.array([fh[lpbwl[0]], n+1, n])
+                    new_tria.append(fh_new)
+
+                else:
+                    fh_new = np.array([fh[lpbwl[0]], n, n + 1])
+                    new_tria.append(fh_new)
+
+        return new_tria, new_points
+
     def _genFaces(self,mesh:om.TriMesh,whs:list, doReverse:bool):
         nl=len(whs)
         npt=len(whs[0])
@@ -1014,7 +446,6 @@ class HullForm(Geometry):
 
         whsPos = []
         whsNeg = []
-
         whsi = []
         whsPos.append(whsi)
         whsNeg.append(whsi)
@@ -1037,8 +468,6 @@ class HullForm(Geometry):
         self._genFaces(mesh, whsNeg,False)
 
         return mesh
-
-
 
     def hullGen(self, shipdata: dict, pdecks: list, nump):
         # gs is the grid size of a cell, in pixels
@@ -1276,17 +705,18 @@ class HullForm(Geometry):
             splitdata = str(shipset['DeckPos']).split(" ")
             nss = 0
             for dp in splitdata:
-                z_deck=float(dp)
+                z_deck = float(dp)
                 pdecks.append(z_deck)
                 if z_deck > draft:
-                    nss+=1
+                    nss += 1
             splitdata = str(shipset['BHPos']).split(" ")
             for dp in splitdata:
                 pbulkheads.append(float(dp))
             splitdata = str(shipset['Decks']).split(" ")
-            i=0
+            i = 0
             for z_deck in pdecks:
-                id_deck=nss-i
+                id_deck = nss - i
                 dict_decks[id_deck] = i
-                i+=1
-        return  shipdata,pdecks,pbulkheads,dict_decks
+                i += 1
+        results = [shipdata,pdecks,pbulkheads,dict_decks]
+        return  results
