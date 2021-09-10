@@ -156,8 +156,8 @@ class DBBCommand(Command):
 				if move_vector is not None:
 					currDBB.move(move_vector)
 					Signals.get().geometryRebuild.emit(currDBB)	#refresha!!!!!!
-					#self.dbbprop.setCurrentDBB(currDBB)
-					#self.dbbprop.moveCurrentDBB()
+					#self._prop_dialog.setCurrentDBB(currDBB)
+					#self._prop_dialog.moveCurrentDBB()
 					##
 
 	def onSetPosition(self):
