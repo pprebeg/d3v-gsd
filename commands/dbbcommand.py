@@ -26,18 +26,14 @@ class QTreeWidgetGeometryItem(QTreeWidgetItem):
 class DBBCommand(Command):
 	def __init__(self):
 		super().__init__()
-		app = QApplication.instance()
+		self._app = QApplication.instance()
 		importer=DBBImporter(self.setProblem)
-		app.registerIOHandler(importer)
-		self.mainwin:QMainWindow = app.mainFrame
+		self.app.registerIOHandler(importer)
 		self._tree: QTreeView = self.mainwin.window.findChild(QTreeView, "geometryTree")
 		self._tree.hide()
 		self.dbbprop = DialogDBBProps(self.mainwin)
 		self.dbbproblem:DBBProblem_new=0
 		self.si=0
-
-		#tools = app.mainFrame.menuTools
-		mb = app.mainFrame.menuBar()
 
 		self.menuMain = QMenu("DBB")
 		
@@ -70,7 +66,7 @@ class DBBCommand(Command):
 		menuIsClosed = self.menu2.addAction("Is Closed?")
 		menuIsClosed.triggered.connect(self.onIsClosed)
 		#tools.addMenu(menu)
-		mb.addMenu(self.menuMain)
+
 		#self._menuMain.setEnabled(False)
 		self._model_ctrl_dock = self._init_model_control()
 		self._model_tree_dock,self._model_tree = self._init_treeveiew()
@@ -79,6 +75,18 @@ class DBBCommand(Command):
 		Signals.get().geometryImported.connect(self.registerDBB)
 		Signals.get().selectionChanged.connect(self.registerSelection)
 		self.dbb = 0
+
+	@property
+	def app(self):
+		return self._app
+
+	@property
+	def mainwin(self):
+		return self.app.mainFrame
+
+	@property
+	def glwin(self):
+		return self.mainwin.glWin
 
 	def send_signals(self,geo_add_reb_del:Tuple[List[DBBBaseAll]]):
 		(geo_add,geo_reb,geo_del)=geo_add_reb_del
@@ -104,14 +112,18 @@ class DBBCommand(Command):
 		ctrl_dock = ModelControlDock('Model Control',self)
 		ctrl_dock.setFloating(False)
 		self.mainwin.addDockWidget(Qt.LeftDockWidgetArea, ctrl_dock)
-		#ctrl_dock.hide()
+		ctrl_dock.hide()
 		return ctrl_dock
 
 	def setProblem(self,dbbproblem):
 		self.dbbproblem=dbbproblem
 		Signals.get().geometryImported.emit(self.dbbproblem.hull)
 		self._model_ctrl_dock.set_dbb_problem(dbbproblem,self._model_tree)
+		self._model_ctrl_dock.show()
 		self._model_tree_dock.show()
+		mb = self.mainwin.menuBar()
+		mb.addMenu(self.menuMain)
+		self.menuMain.show()
 
 
 
@@ -360,7 +372,6 @@ class ModelControlDock(QDockWidget):
 		self._populate_treeveiew(self.dbb_prob)
 		self.populate_designs_combo()
 		self.dbb_cmnd.send_signals(dbb_problem.set_portside_starboardside_visibility(self.show_portside,self.show_starbside,True))
-		self.show()
 
 	def populate_designs_combo(self):
 		cb:QComboBox = self._combo_curr_design
