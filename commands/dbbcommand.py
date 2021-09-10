@@ -13,6 +13,7 @@ from commands import Command
 from iohandlers import IOHandler
 from signals import Signals
 from typing import Dict,List, Tuple
+from selinfo import SelectionInfo
 
 class QTreeWidgetGeometryItem(QTreeWidgetItem):
 	def __init__(self,parent,geo):
@@ -248,7 +249,8 @@ class ModelControlDock(QDockWidget):
 		super().__init__(name,parent.mainwin)
 		self._dbbcommand:DBBCommand = parent
 		self._mainwin = self._dbbcommand.mainwin
-		self._tree = None
+		self._tree:QTreeWidget = None
+		self._tree_segments_dict={}
 		self._dbb_problem:DBBProblem_new = None
 		widget = QWidget()
 		mainLayout = QVBoxLayout()
@@ -355,7 +357,9 @@ class ModelControlDock(QDockWidget):
 	def set_dbb_problem(self,dbb_problem,model_tree):
 		self._dbb_problem = dbb_problem
 		self._tree = model_tree
+		self._populate_treeveiew(self.dbb_prob)
 		self.populate_designs_combo()
+		self.dbb_cmnd.send_signals(dbb_problem.set_portside_starboardside_visibility(self.show_portside,self.show_starbside,True))
 		self.show()
 
 	def populate_designs_combo(self):
@@ -369,20 +373,28 @@ class ModelControlDock(QDockWidget):
 			cb.addItem(key)
 		cb.setCurrentIndex(0)
 		cb.currentIndexChanged.connect(self.on_change_design)
-		self.on_change_design(0)
+		self.on_change_design(0,False)
 
 
-	def on_change_design(self,i):
+	def on_change_design(self,i,do_send_signal=True):
 		QApplication.setOverrideCursor(Qt.WaitCursor)
 		try:
 			self._tree.itemChanged.disconnect()
 		except Exception:
 			pass
 		id_design = self._combo_curr_design.currentText()
-		geo_add_reb_del = self.dbb_prob.set_current_design(id_design,self.show_portside,self.show_starbside)
-		self._populate_treeveiew(self._tree, self.dbb_prob)
+		dict_seg_show:Dict[str,bool]={}
+		for id,node_2 in self._tree_segments_dict.items():
+			if node_2.checkState(0)== Qt.Unchecked:
+				dict_seg_show[id]=False
+			else:
+				dict_seg_show[id] = True
+		geo_add_reb_del = self.dbb_prob.set_current_design(id_design,self.show_portside,self.show_starbside,do_send_signal,dict_seg_show)
+		self._replace_treeveiew_compartment_nodes(self.dbb_prob)
 		self._tree.itemChanged.connect(self._handle_tree_ItemChanged)
-		self.dbb_cmnd.send_signals(geo_add_reb_del)
+		self._tree.itemSelectionChanged.connect(self._handle_tree_ItemSelectionChanged)
+		if do_send_signal:
+			self.dbb_cmnd.send_signals(geo_add_reb_del)
 		QApplication.restoreOverrideCursor()
 
 	def on_change_cbx_port_starboard(self, state):
@@ -429,14 +441,40 @@ class ModelControlDock(QDockWidget):
 						Signals.get().geometryRemoved.emit(geo)
 		QApplication.restoreOverrideCursor()
 
-	def _populate_treeveiew(self,tree:QTreeWidget,dbbproblem:DBBProblem_new):
+	def _handle_tree_ItemSelectionChanged(self):
+		QApplication.setOverrideCursor(Qt.WaitCursor)
+		item = self._tree.selectedItems()[0]
+		# do lengthy process
+		if isinstance(item, QTreeWidgetGeometryItem):
+			si = SelectionInfo()
+			si.update(0,0, item.geometry)
+			item.geometry.onSelected(si)
+			# obavijesti sve zainteresirane da je selekcija promijenjena
+			Signals.get().selectionChanged.emit(si)
+			self._mainwin.glWin.update()
+		QApplication.restoreOverrideCursor()
+
+	def _populate_treeveiew(self,dbbproblem:DBBProblem_new):
+		tree:QTreeWidget = self._tree
 		tree.clear()
+		self._tree_segments_dict.clear()
+
 		#Hull Form
 		child = QTreeWidgetGeometryItem(tree, dbbproblem.hull)
 		child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
 		child.setText(0, "Hull Form")
 		child.setCheckState(0, Qt.Checked)
 
+		#Bulkheads
+		node_0 = QTreeWidgetItem(tree)
+		node_0.setFlags(node_0.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
+		node_0.setText(0, "Bulkheads")
+		node_0.setCheckState(0, Qt.Checked)
+		for bulk in dbbproblem.bulkheads:
+			child = QTreeWidgetGeometryItem(node_0, bulk)
+			child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
+			child.setText(0, str(bulk.id))
+			child.setCheckState(0, Qt.Checked)
 		for deck in dbbproblem.decks:
 			#
 			node_0 = QTreeWidgetItem(tree)
@@ -469,11 +507,28 @@ class ModelControlDock(QDockWidget):
 				node_2.setFlags(node_2.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 				node_2.setText(0, "Segment {}".format(segment.id))
 				node_2.setCheckState(0, Qt.Checked)
+
+				self._tree_segments_dict[segment.id]=node_2
+
+	def _replace_treeveiew_compartment_nodes(self,dbbproblem:DBBProblem_new):
+		for node in self._tree_segments_dict.values():
+			node.takeChildren()
+		for deck in dbbproblem.decks:
+			for segment in deck.segments:
+				node_2 = self._tree_segments_dict[segment.id]
+				check_state = node_2.checkState(0)
+				node_2.takeChildren()
 				for comp in segment.compartments:
 					child = QTreeWidgetGeometryItem(node_2, comp)
 					child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
 					child.setText(0, "Compartment {}".format(comp.id))
-					child.setCheckState(0, Qt.Checked)
+					if comp.show:
+						child.setCheckState(0, Qt.Checked)
+					else:
+						child.setCheckState(0, Qt.Unchecked)
+				if check_state == Qt.PartiallyChecked:
+					check_state == Qt.Checked
+				node_2.setCheckState(0, check_state)
 
 
 def createCommand():

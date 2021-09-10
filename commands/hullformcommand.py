@@ -5,7 +5,6 @@ from PySide2.QtCore import QAbstractTableModel, QModelIndex, QRect
 from PySide2.QtGui import QColor, QPainter
 from PySide2.QtCharts import QtCharts
 from PySide2.QtCore import SIGNAL,SLOT
-from scipy.optimize import minimize
 import openmesh as om
 import numpy as np
 import os
@@ -91,7 +90,7 @@ class HullFormCommand(Command):
     def onShowResistanceCurves(self):
         if isinstance(self.hf,HullForm):
             self.hf_resistCurves.setCurrentHullForm(self.hf)
-            #self.hf_hydroCurves.exec()
+            self.hf_resistCurves.exec()
 
 
 

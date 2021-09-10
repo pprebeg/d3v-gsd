@@ -1345,7 +1345,7 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = False):
 			
 			
 	# plt.show()
-	print(is_mesh_closed(final_mesh))
+	#print(is_mesh_closed(final_mesh))
 	return final_mesh
 
 	
@@ -1372,7 +1372,9 @@ def flip_mesh_face_orientation(mesh):
 	
 
 def clean_mesh(mesh, vh_idx_to_sync = None):
-	mesh_fvi = mesh.face_vertex_indices()	
+	if mesh.n_faces() == 0:
+		return mesh
+	mesh_fvi = mesh.face_vertex_indices()
 	mesh_points = mesh.points()
 	mesh_tpoints = mesh_points[mesh_fvi]
 	mesh_normals = np.cross(mesh_tpoints[:,1] - mesh_tpoints[:,0], mesh_tpoints[:,2] - mesh_tpoints[:,0])
@@ -1412,6 +1414,9 @@ def hard_merge_meshes2(meshes, vh_idx_to_sync = None):			#vh_idx_to_sync_list is
 	if vh_idx_to_sync is None:
 		merged_mesh = soft_merge_meshes(meshes)
 		merged_mesh = soft_merge_meshes(meshes)
+
+		if merged_mesh.n_faces() ==0:
+			return merged_mesh
 		merged_mesh_fvi = merged_mesh.face_vertex_indices()
 		merged_mesh_points = merged_mesh.points()
 		
@@ -1587,7 +1592,9 @@ def move_mesh(mesh, move_vector):
 		mesh.set_point(vh, new_point)
 	return mesh
 	
-def is_mesh_closed(mesh):	
+def is_mesh_closed(mesh):
+	if mesh.n_faces()==0:
+		return False
 	for eh in mesh.edges():		#check if mesh has any boundary edges if not mesh is closed, if yes mesh is open
 		if mesh.is_boundary(eh) == True:
 			return False

@@ -17,7 +17,7 @@ from typing import Set,Dict,List
 
 class HullFormMeshQuality:
     def __init__(self):
-        self._numWL = 20
+        self._numWL = 50
         self._numPnWLhalf = 20
         self._distPolyOrder=3
 
@@ -69,13 +69,10 @@ class HullForm(Geometry):
         self.filename = fileName
         self.shipdata = {}
         self.pdecks =[]
+        self.dict_decks = {}
         self.pbulkheads = []
         self.hfmq = HullFormMeshQuality()
-        results = self.readShipData()
-        self.shipdata = results[0]
-        self.pdecks = results[1]
-        self.pbulkheads = results[2]
-        self.dict_decks = results[3]
+        self.shipdata,self.pdecks,self.pbulkheads,self.dict_decks = self.readShipData()
         self.h = []  # positive y waterlines
         self.wlinesNeg = []  # negative y waerlines
         self.wlKeel = []  # keel waterline (one waterline)
@@ -165,14 +162,39 @@ class HullForm(Geometry):
 
         return 2*area #,np.array(mfa)
 
+    def getTransomAngle(self, h, fvs, points):
+        wlpoints = self.getSortedPointsOnAxisAlignedPlane(h, fvs, points, 2)
+        wlpoints = sorted(wlpoints, key=lambda p: p[0])
+        wlpoints=self.clearWlpointsList(wlpoints)
+        print("wl0", wlpoints)
+
+        deltaX = wlpoints[5][0] - wlpoints[3][0]
+        deltaY=wlpoints[5][1] - wlpoints[3][1]
+        angle=deltaY/deltaX
+        return angle
+
+    def clearWlpointsList(self,wlpoints):
+        x=[]
+        x=wlpoints
+        n=len(x)
+        y=[]
+        #y=wlpoints
+        for i in range (n):
+            if x[i][1]>=0 and x[i][0]<1:
+                y.append(x[i])
+        return y
+
+
+
     def getLwlBwl(self, h, fvs, points):
         wlpoints = self.getSortedPointsOnAxisAlignedPlane(h, fvs, points, 2)
         wlpoints = sorted(wlpoints, key=lambda p: p[1])
+        #print("wl1", wlpoints)
         Bwl = wlpoints[-1][1]-wlpoints[0][1]
 
         wlpoints = sorted(wlpoints, key=lambda p: p[0])
-
         Lwl = wlpoints[-1][0] - wlpoints[0][0]
+
         return Lwl, Bwl
 
     def getSortedPointsOnAxisAlignedPlane(self, x, fvs, points, os):
@@ -469,7 +491,7 @@ class HullForm(Geometry):
 
         return mesh
 
-    def hullGen(self, shipdata: dict, pdecks: list, nump):
+    def hullGen(self, shipdata: dict, pdecks: list, nump,frame_positions:List[float] = None):
         # gs is the grid size of a cell, in pixels
         # Reminder to make gridsize scaled to the screen width
         # Sets hullformdir data to slider values
@@ -701,22 +723,22 @@ class HullForm(Geometry):
             shipdata["plr_val"] = float(splitdata[41])
             shipdata["gmt_val"] = float(splitdata[42])
 
-            draft = shipdata["draft_val"]
-            splitdata = str(shipset['DeckPos']).split(" ")
-            nss = 0
-            for dp in splitdata:
-                z_deck = float(dp)
-                pdecks.append(z_deck)
-                if z_deck > draft:
-                    nss += 1
-            splitdata = str(shipset['BHPos']).split(" ")
-            for dp in splitdata:
-                pbulkheads.append(float(dp))
-            splitdata = str(shipset['Decks']).split(" ")
-            i = 0
-            for z_deck in pdecks:
-                id_deck = nss - i
-                dict_decks[id_deck] = i
-                i += 1
-        results = [shipdata,pdecks,pbulkheads,dict_decks]
-        return  results
+        draft = shipdata["draft_val"]
+        splitdata = str(shipset['DeckPos']).split(" ")
+        nss = 0
+        for dp in splitdata:
+            z_deck = float(dp)
+            pdecks.append(z_deck)
+            if z_deck > draft:
+                nss += 1
+        splitdata = str(shipset['BHPos']).split(" ")
+        for dp in splitdata:
+            pbulkheads.append(float(dp))
+        splitdata = str(shipset['Decks']).split(" ")
+        i = 0
+        for z_deck in pdecks:
+            id_deck = nss - i
+            dict_decks[id_deck] = i
+            i += 1
+
+        return shipdata, pdecks, pbulkheads, dict_decks

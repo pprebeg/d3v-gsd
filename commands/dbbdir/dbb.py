@@ -8,6 +8,9 @@ from hullformdir.hullform import HullForm
 #d3v imports
 from extendedgeometry import ExtendedGeometry
 from typing import List, Dict,Tuple
+import itertools
+from collections import deque
+
 
 class DBBBaseAll(ExtendedGeometry):
 	def __init__(self, id):
@@ -225,6 +228,159 @@ class DBBHullFormAll(DBBBaseAll):
 		msg += "\nD = " + str(self.D)
 		return msg
 
+class DBBBulkhead(DBBBaseAll):
+	def __init__(self, bulk_id,bulk_type:str, hullform:DBBHullFormAll, size: np.ndarray=None, position: np.ndarray=None):
+		super().__init__(bulk_id)
+		self._hullform:DBBHullFormAll = hullform
+		self._size= size
+		self._position = position
+		self._bulk_type = bulk_type
+		self.regenerateMesh()
+
+	show_bulkheads = True
+
+	@property
+	def hullform(self):
+	    return self._hullform._hullform
+
+	@property
+	def x_frame(self):
+		return self.position[0]
+
+	@property
+	def z_start(self):
+		return self.position[2]
+
+	@property
+	def z_end(self):
+		return self.position[2]+self._size[2]
+
+	@DBBBaseAll.show.getter
+	def show(self):
+		return self._show and DBBBulkhead.show_bulkheads
+
+	def gen_mesh_points_fvs(self,frame_points:List[np.ndarray]):
+		points = frame_points.copy()
+		fvs=[]
+		n_p= len(frame_points)
+		isym_1=0
+		if frame_points[0][1] != 0.0:
+			sym_p =np.array(frame_points[0])
+			sym_p[1] = 0.0
+			isym_1 = len(points)
+			points.append(sym_p)
+
+		for i in range(1,n_p):
+			sym_p = np.array(frame_points[i])
+			sym_p[1] = 0.0
+			isym_2 = len(points)
+			points.append(sym_p)
+			if isym_1 >=n_p:
+				fvs.append(np.array([i-1, isym_1, isym_2]))
+			fvs.append(np.array([i-1, isym_2, i]))
+			isym_1=isym_2
+		return points,fvs
+
+	def trim_sorted_points_by_z_start_end(self,points):
+		trim_points = []
+		n_p=len(points)
+		z_tol = 0.0001
+		i=0
+		while(i < n_p and points[i][2]<self.z_start):
+			i+=1
+		if i > 0 and (points[i][2]-z_tol) > self.z_start:
+			p = np.array([self.x_frame,0.0,self.z_start])
+			p[1]=points[i-1][1]+(points[i][1]-points[i-1][1])/(points[i][2]-points[i-1][2])*(self.z_start-points[i-1][2])
+			trim_points.append(p)
+		while (i < n_p and points[i][2] <= self.z_end):
+			trim_points.append(points[i])
+			i += 1
+		if i > 0 and i < n_p and (points[i-1][2]+z_tol) < self.z_end:
+			p =  np.array([self.x_frame,0.0,self.z_end])
+			p[1]=points[i-1][1]+(points[i][1]-points[i-1][1])/(points[i][2]-points[i-1][2])*(self.z_end-points[i-1][2])
+			trim_points.append(p)
+
+		return trim_points
+
+	def getSortedPointsOnFrame(self, x, fvs, points):
+		axis_index=0
+		points_on_plane = []
+		lpr = []
+		lpl = []
+		for fv in fvs:
+			lpr.clear()
+			lpl.clear()
+			for iv in fv:
+				p = points[iv]
+				if p[axis_index] < x:
+					lpl.append(iv)
+				elif p[axis_index] > x:
+					lpr.append(iv)
+				else:
+					points_on_plane.append(p)
+
+			if len(lpl) > 0 and len(lpr) > 0:
+				if len(lpl) < len(lpr):
+					points_on_plane.append(self.getIntersectionPoint(points[lpl[0]], points[lpr[0]], x, axis_index))
+					points_on_plane.append(self.getIntersectionPoint(points[lpl[0]], points[lpr[1]], x, axis_index))
+				elif len(lpl) > len(lpr):
+					points_on_plane.append(self.getIntersectionPoint(points[lpl[0]], points[lpr[0]], x, axis_index))
+					points_on_plane.append(self.getIntersectionPoint(points[lpl[1]], points[lpr[0]], x, axis_index))
+				else:
+					points_on_plane.append(self.getIntersectionPoint(points[lpl[0]], points[lpr[0]], x, axis_index))
+				pass
+
+
+		points_on_plane.sort()
+		temp_points = list(points_on_plane for points_on_plane, _ in itertools.groupby(points_on_plane))
+		points_on_plane = temp_points
+		points_on_plane = sorted(points_on_plane, key=lambda p: p[2])
+		points_pos = []
+		points_neg = []
+		for p in points_on_plane:
+			if p[1] > 0:
+				points_pos.append(p)
+			elif p[1] < 0:
+				points_neg.append(p)
+			else:
+				points_pos.append(p)
+				points_neg.append(p)
+		return points_pos,points_neg
+
+	def getIntersectionPoint(self, p1, p2, h, axis_index):
+		ip1 = 0
+		if axis_index == 2:
+			ip1 = [(h - p2[2]) / (p1[2] - p2[2]) * (p1[0] - p2[0]) + p2[0],
+				   (h - p2[2]) / (p1[2] - p2[2]) * (p1[1] - p2[1]) + p2[1], h]
+		if axis_index == 0:
+			ip1 = [h, (h - p1[0]) / (p2[0] - p1[0]) * (p2[1] - p1[1]) + p1[1],
+				   (h - p1[0]) / (p2[0] - p1[0]) * (p2[2] - p1[2]) + p1[2]]
+
+		return ip1
+	def _genMesh(self):  # za keel koji je na 0 nema wl
+
+		meshp = None
+		meshn = None
+		fvs = self.hullform.mesh.fv_indices().tolist()
+		points = self.hullform.mesh.points().tolist()
+		points_pos,points_neg = self.getSortedPointsOnFrame(self.x_frame, fvs, points)
+		points_pos = self.trim_sorted_points_by_z_start_end(points_pos)
+		points_neg = self.trim_sorted_points_by_z_start_end(points_neg)
+		pneg,fvsneg = self.gen_mesh_points_fvs(points_neg)
+		ppos, fvspos = self.gen_mesh_points_fvs(points_pos)
+		meshp = om.TriMesh(ppos, fvspos)
+		meshn = om.TriMesh(pneg, fvsneg)
+
+
+		if meshn is not None and meshp is not None:
+			self.mesh = DBBBaseAll.join_tria_meshes(meshp,meshn)
+		else:
+			self.mesh = om.TriMesh()
+	def get_info(self) -> str:
+		msg= super().get_info()
+		msg="Bulkhead"+msg
+		return msg
+
 class DBBDeckBase(DBBBaseAll):
 	def __init__(self,deck_id, hullform:DBBHullFormAll, size: np.ndarray=None, position: np.ndarray=None):
 		super().__init__(deck_id)
@@ -285,7 +441,137 @@ class DBBDeckPlate(DBBDeckUnitBase):
 		msg= super().get_info()
 		msg="Deck Plate"+msg
 		return msg
+class DBBDeckPlateRSB(DBBDeckPlate):
+	def __init__(self,deck_id, hullform,  size: np.ndarray, position: np.ndarray,parent_deck_segment:DBBBaseAll,
+				 rsb_deck_points: List[List[np.ndarray]]):
+		self._rsb_deck_points:List[List[np.ndarray]]=rsb_deck_points
+		super().__init__(deck_id, hullform, size, position,parent_deck_segment)
 
+	def _gen_mesh_points_fvs(self, deck_points:List[np.ndarray]):
+		#points are prepared to start and end with y=0
+		points = deck_points.copy()
+		fvs=[]
+		n_p= len(deck_points)
+		isym_1=0
+		for i in range(1,n_p-1):
+			sym_p = np.array(deck_points[i])
+			sym_p[1] = 0.0
+			isym_2 = len(points)
+			points.append(sym_p)
+			if isym_1 >=n_p:
+				fvs.append(np.array([i-1, isym_1, isym_2]))
+			fvs.append(np.array([i-1, isym_2, i]))
+			isym_1=isym_2
+		fvs.append(np.array([i - 1, isym_1, i]))
+		return points,fvs
+	def _genMesh(self):  # za keel koji je na 0 nema wl
+		self.mesh = None
+		for rsb_point in self._rsb_deck_points:
+			result = self._gen_pos_neg_points(rsb_point)
+			for points in result:
+				points,fvs = self._gen_mesh_points_fvs(points)
+				mesh = om.TriMesh(points, fvs)
+				if self.mesh is None:
+					self.mesh = mesh
+				else:
+					self.mesh = DBBBaseAll.join_tria_meshes(self.mesh, mesh)
+
+
+	def _gen_pos_neg_points(self, rsb_point):
+		points_pos = []
+		points_neg = []
+		is_last_pos_neg = False
+		is_last_neg_pos = False
+		ilast = len(rsb_point)-1
+		if rsb_point[0][0]==rsb_point[ilast][0] and rsb_point[0][1]==rsb_point[ilast][1]:
+			ilast=ilast-1
+		for i in range(len(rsb_point)):
+			p = rsb_point[i]
+			if np.allclose(rsb_point[i],rsb_point[ilast],0.001):
+				continue
+			if p[1] > 0:
+				if is_last_pos_neg:
+					pnew = np.array([0.0, 0.0, p[2]])
+					pnew[0] = rsb_point[ilast][0] + (rsb_point[i][0] - rsb_point[ilast][0]) / (
+							rsb_point[i][1] - rsb_point[ilast][1]) * (0.0 - rsb_point[ilast][1])
+					points_pos.append(pnew)
+					points_neg.append(pnew)
+				points_pos.append(p)
+				is_last_pos_neg = False
+				is_last_neg_pos = True
+			elif p[1] < 0:
+				if is_last_neg_pos:
+					pnew = np.array([0.0, 0.0, p[2]])
+					pnew[0] = rsb_point[ilast][0] + (rsb_point[i][0] - rsb_point[ilast][0]) / (
+						rsb_point[i][1] - rsb_point[ilast][1]) * (0.0 - rsb_point[ilast][1])
+					points_neg.append(pnew)
+					points_pos.append(pnew)
+				points_neg.append(p)
+				is_last_pos_neg = True
+				is_last_neg_pos = False
+			else:
+				points_pos.append(p)
+				points_neg.append(p)
+				is_last_pos_neg = False
+				is_last_neg_pos = False
+			ilast = i
+		# handle last point
+		p1 = rsb_point[0]
+		pnew = None
+		if (p1[1] * p[1]) < 0:
+			pnew = np.array([0.0, 0.0, p[2]])
+			pnew[0] = p[0] + (p1[0] - p[0]) / (p1 - p[1]) * (0.0 - p[1])
+			if p[1] < 0:
+				points_pos.insert(0, pnew)
+				points_neg.append(pnew)
+			elif p[1] > 0:
+				points_neg.insert(0, pnew)
+				points_pos.append(pnew)
+			else:
+				if p1[1] > 0:
+					points_pos.insert(0, pnew)
+				elif p1[1] < 0:
+					points_neg.insert(0, pnew)
+				elif p[1] < 0:
+					points_neg.append(pnew)
+				elif p[1] > 0:
+					points_pos.append(pnew)
+		if p1[1] < 0: # started with negative y values
+			temp = points_neg.copy()
+			# find second zero
+			n0=0
+			i=0
+			for p in temp:
+				if p[1] == 0.0:
+					n0+=1
+					if n0 == 2:
+						break
+				i+=1
+			ineg=0
+			for j in range(i,len(temp)):
+				points_neg[ineg]=temp[j]
+				ineg+=1
+			for j in range(0,i):
+				points_neg[ineg]=temp[j]
+				ineg+=1
+		# elif not np.allclose(p1,p,0.001):
+		# 	if p[1] > 0:
+		# 		points_pos.append(p1)
+		# 	elif p[1] > 0:
+		# 		points_pos.append(p1)
+		# 	else:
+		# 		if p1[1] > 0:
+		# 			points_pos.insert(0, p)
+		# 			points_neg.append(p1)
+		# 		elif p1[1] < 0:
+		# 			points_neg.insert(0, p)
+		# 			points_pos.append(p1)
+		return points_pos,points_neg
+
+	def get_info(self) -> str:
+		msg= super().get_info()
+		msg="Deck Plate RSB"+msg
+		return msg
 class DBBDeckHull(DBBDeckUnitBase):
 	def __init__(self, deck_id, hullform, size: np.ndarray, position: np.ndarray, parent_deck_segment: DBBBaseAll):
 		super().__init__(deck_id, hullform, size, position,parent_deck_segment)
@@ -308,7 +594,42 @@ class DBBDeckHull(DBBDeckUnitBase):
 		msg= super().get_info()
 		msg="Deck Hull"+msg
 		return msg
+class DBBDeckHullRSB(DBBDeckHull):
+	def __init__(self, deck_id, hullform, size: np.ndarray, position: np.ndarray, parent_deck_segment: DBBBaseAll,
+				 rsb_hull_points:List[List[List[np.ndarray]]]):
+		self._rsb_hull_points:List[List[List[np.ndarray]]]=rsb_hull_points
 
+		super().__init__(deck_id, hullform, size, position,parent_deck_segment)
+
+
+
+	def _genMesh(self):  # za keel koji je na 0 nema wl
+		self.mesh = None
+		for rsb_points in self._rsb_hull_points:
+			points,fvs = self._gen_mesh_points_fvs(rsb_points)
+			mesh = om.TriMesh(points, fvs)
+			if self.mesh is None:
+				self.mesh = mesh
+			else:
+				self.mesh = DBBBaseAll.join_tria_meshes(self.mesh,mesh)
+
+	def _gen_mesh_points_fvs(self,ulpoints:List[np.ndarray]):
+		points = ulpoints[0]+ulpoints[1]
+		n_p= len(ulpoints[0])
+		fvs=[]
+		for iu in range(1,n_p,1):
+			il=iu+n_p
+			fvs.append(np.array([il-1, il, iu]))
+			fvs.append(np.array([il-1, iu, iu-1]))
+		iu=n_p-1
+		il = iu+n_p
+		fvs.append(np.array([il, n_p, 0]))
+		fvs.append(np.array([il, 0, iu]))
+		return points,fvs
+	def get_info(self) -> str:
+		msg= super().get_info()
+		msg="RSB Deck Hull"+msg
+		return msg
 class DBBBase(DBBBaseAll):
 	def __init__(self, id, size:np.ndarray, position:np.ndarray,block_type:str,deck_hull:DBBDeckHull):
 		super().__init__(id)
@@ -447,10 +768,19 @@ class DBBSegment(DBBBase):
 		return msg
 
 class DBBDeckPlateHullSegment(DBBDeckBase):
-	def __init__(self,deck_id, hullform:HullForm,  size: np.ndarray, position: np.ndarray):
+	def __init__(self,deck_id, hullform:HullForm,  size: np.ndarray, position: np.ndarray,
+				 rsb_hull_points:List[List[List[np.ndarray]]] = None,
+				 rsb_deck_points:List[List[np.ndarray]] = None):
 		super().__init__(deck_id, hullform, size, position)
-		self._deckhull = DBBDeckHull(self.id,self._hullform,self.size,self.position,self)
-		self._deckplate = DBBDeckPlate(self.id, self._hullform, self.size, self.position,self)
+		if rsb_hull_points != None:
+			self._deckhull = DBBDeckHullRSB(self.id,self._hullform,self.size,self.position,self,rsb_hull_points)
+		else:
+			self._deckhull = DBBDeckHull(self.id,self._hullform,self.size,self.position,self)
+		if rsb_deck_points != None:
+			self._deckplate = DBBDeckPlateRSB(self.id, self._hullform, self.size, self.position,self,rsb_deck_points)
+		else:
+			self._deckplate = DBBDeckPlate(self.id, self._hullform, self.size, self.position,self)
+
 		self.regenerateMesh()
 		self._segments:Dict[str,DBBSegment] = {}
 
@@ -478,10 +808,14 @@ class DBBDeckPlateHullSegment(DBBDeckBase):
 	def remove_segment(self,id):
 		return self._segments.pop(id)
 
-	def clear_segments(self):
+	def clear_segments_compartments(self):
 		for segment in self.segments:
 			segment.clear_compartments()
-		self._segments.clear()
+
+	def append_all_compartments_list(self,all_compartments:List[DBBCompartment]):
+		for segment in self.segments:
+			for compartment in segment._compartments.values():
+				all_compartments.append(compartment)
 
 	def _genMesh(self):  # za keel koji je na 0 nema wl
 		self.mesh = om.TriMesh()
@@ -497,23 +831,36 @@ class DBBDeckPlateHullSegment(DBBDeckBase):
 		else:
 			self.mesh = om.TriMesh()
 
+
+
 		
 class DBBProblem_new():
 	def __init__(self, fileName):
 		self.filename = fileName
 		self.hull:DBBHullFormAll = 0
 		self._dictdecks: Dict[int,DBBDeckPlateHullSegment] = {}
-		self._designs:Dict[str,List[str]] = {}
+		self._dictbulkheads: Dict[str, DBBBulkhead] = {}
+		self._designs:Dict[str,str] = {}
 		self.design_id=''
 		if (fileName != ""):
-			self.read_problem()
+			wbo_file,rsb_file,sb_file = self.read_problem()
+			self.prepare_permanent_objects(wbo_file,rsb_file,sb_file)
 
+
+
+	def prepare_permanent_objects(self, wbo_file:str, rsb_file:str, sb_file):
+		self.prepare_decks(rsb_file, True)
+		self.read_bulkheads(wbo_file,True)
+		self.read_segments(sb_file, True)
 
 
 
 	@property
-	def decks(self):
+	def decks(self)->List[DBBDeckPlateHullSegment]:
 	    return self._dictdecks.values()
+	@property
+	def bulkheads(self)->List[DBBBulkhead]:
+	    return self._dictbulkheads.values()
 	@property
 	def designs(self):
 	    return self._designs
@@ -524,47 +871,62 @@ class DBBProblem_new():
 
 	def clear_current_design(self):
 		for deck in self.decks:
-			deck.clear_segments()
-		self._dictdecks.clear()
+			deck.clear_segments_compartments()
 
 
-	def set_current_design(self,id_design, is_port, is_starb):
+	def set_current_design(self,id_design, is_port, is_starb,do_port_strab_vis=True,dict_seg_show:Dict[str,bool]=None):
 		if not id_design in self.designs:
 			return [[],[],[]]
-		[seg_path, comp_path] = self.designs[id_design]
+		comp_path = self.designs[id_design]
 
-		allgeo = self.get_all_geometries()
+		allgeo = self.get_all_compartments()
 		geo_add = []
 		geo_reb = []
+		geo_del = []
 		geo_del = self.get_all_visible_geometries(allgeo)
 		self.clear_current_design()
-
-		z_last=self.hull.get_deck_z_index(0)-self.hull.get_deck_z_index(1)+self.hull.get_deck_z_index(0)
-		for key, value in self.hull.deck_indexes.items():
-			z_deck = self.hull.get_deck_z_index(value)
-			z_deck_up = z_last
-			z_last = z_deck
-			size = np.array([0, 0, z_deck_up-z_deck])
-			position = np.array([0, 0,z_deck])
-			deckhull = DBBDeckPlateHullSegment(key,self.hull,size,position)
-			self._dictdecks[key] =deckhull
-		self.read_segments(seg_path,True)
 		self.read_compartments(comp_path,True)
-		res = self.set_portside_starboardside_visibility(is_port,is_starb)
-		geo_add = res[1]
+		geo_add = self.get_all_compartments()
+		if dict_seg_show is not None:
+			for comp in geo_add:
+				comp.set_show(dict_seg_show[comp.segment.id])
+		if do_port_strab_vis:
+			geo_add = self.set_geolist_portside_starboardside_visibility_(geo_add,is_port,is_starb)
 		return geo_add, geo_reb, geo_del
 
-	def set_current_design_old(self, id_design, is_deck, is_hull, is_seg, is_comp, is_port, is_starb):
-		id_design = 'Ind_10'
-		if not id_design in self.designs:
-			return [[], [], []]
-		[seg_path, comp_path] = self.designs[id_design]
+	def prepare_decks(self,file_path,do_show):
+		dict_rsb_data = {}
+		if os.path.isfile(file_path):
+			with open(file_path, "r") as csv_file:
+				csv_reader = csv.DictReader(csv_file)
+				#Type,Identifier,Deck,Vertices
+				for row in csv_reader:  # each row contains 1 block data
+					deck_code = int(row["Deck"])
+					dict_rsb_data.setdefault(deck_code,[])
+					deck_rsbs =dict_rsb_data[deck_code]
+					rsb_data = []
+					deck_rsbs.append(rsb_data)
+					id = str(row["Identifier"])
+					type = str(row["Type"])
+					vertdata = str(row['Vertices'])
+					rsb_data.append(id)
+					rsb_data.append(type)
+					rsb_data.append(vertdata)
 
-		allgeo = self.get_all_geometries()
-		geo_add = []
-		geo_reb = []
-		geo_del = self.get_all_visible_geometries(allgeo)
-		self.clear_current_design()
+		dict_rsb_deck_points = {}
+		dict_rsb_hull_points = {}
+		for deck_code,deck_rsbs in dict_rsb_data.items():
+			deck_index=self.hull.deck_indexes[deck_code]
+			deck_z = self.hull.get_deck_z_index(deck_index)
+			lower_deck_code=deck_code-1
+			lower_deck_index= self.hull.deck_indexes[lower_deck_code]
+			lower_deck_z = self.hull.get_deck_z_index(lower_deck_index)
+			dict_rsb_deck_points[deck_code]=[]
+			dict_rsb_hull_points[lower_deck_code] = []
+			for rsb_data in deck_rsbs:
+				points = self._process_rsb_data(self.hull._hullform,[lower_deck_z,deck_z],rsb_data)
+				dict_rsb_deck_points[deck_code].append(points[1])
+				dict_rsb_hull_points[lower_deck_code].append(points)
 
 		z_last = self.hull.get_deck_z_index(0) - self.hull.get_deck_z_index(1) + self.hull.get_deck_z_index(0)
 		for key, value in self.hull.deck_indexes.items():
@@ -573,15 +935,27 @@ class DBBProblem_new():
 			z_last = z_deck
 			size = np.array([0, 0, z_deck_up - z_deck])
 			position = np.array([0, 0, z_deck])
-			deckhull = DBBDeckPlateHullSegment(key, self.hull, size, position)
-			deckhull.plate.set_show(is_deck)
-			deckhull.hull.set_show(is_hull)
+			deckhull = DBBDeckPlateHullSegment(key, self.hull, size, position,
+											   dict_rsb_hull_points.get(key),dict_rsb_deck_points.get(key))
 			self._dictdecks[key] = deckhull
-		self.read_segments(seg_path, is_seg)
-		self.read_compartments(comp_path, is_comp)
-		res = self.set_portside_starboardside_visibility(is_port, is_starb)
-		geo_add = res[1]
-		return geo_add, geo_reb, geo_del
+
+	def read_bulkheads(self,file_path,do_show):
+		if os.path.isfile(file_path):
+			with open(file_path, "r") as csv_file:
+				csv_reader = csv.DictReader(csv_file)
+				#Type,Identifier,x,DeckStart,DeckEnd
+				for row in csv_reader:  # each row contains 1 block data
+					deck_code = int(row["DeckStart"])
+					deck_start=self._dictdecks.get(deck_code)
+					deck_code = int(row["DeckEnd"])
+					deck_end = self._dictdecks.get(deck_code)
+					if deck_start is not None:
+						position = np.array([float(row["x"]),0.0,deck_start.position[2]])
+						size = np.array([0.0,0.0,deck_end.position[2]-position[2]])
+						id = str(row["Identifier"])
+						type = str(row["Type"])
+						bulkhead = DBBBulkhead(id,type,self.hull,size,position)
+						self._dictbulkheads[id]=bulkhead
 
 	def read_segments(self,file_path,do_show):
 		with open(file_path, "r") as csv_file:
@@ -597,6 +971,31 @@ class DBBProblem_new():
 					segment = DBBSegment(id,size,position,type,deck.hull,'zone?',deck)
 					segment.set_show(do_show)
 					deck.add_segment(segment)
+		self.add_fix_segments(do_show)
+	def add_fix_segments(self,do_show):
+		file_path = ""
+		for value in self._designs.values():
+			file_path=value
+			break
+		with open(file_path, "r") as csv_file:
+			csv_reader = csv.DictReader(csv_file)
+			for row in csv_reader:  # each row contains 1 block data
+				deck_code = int(row["Deck"])
+				deck=self._dictdecks.get(deck_code)
+				if deck is not None:
+					id_seg = str(row["Segment"])
+					if id_seg == 'NO':
+						position = np.array([float(row["Ax"]), float(row["Ay"]), deck.position[2]])
+						size = np.array([float(row["b"]), float(row["a"]), deck.size[2]])
+						id = str(row["Identifier"])
+						type = str(row["Type"])
+						zone = str(row["Zone"])
+						segment = DBBSegment('NO'+id, size, position, type, deck.hull, zone, deck)
+						segment.set_show(do_show)
+						deck.add_segment(segment)
+						comp = DBBCompartment(id, size, position, type, deck.hull, zone, segment)
+						comp.set_show(do_show)
+						segment.add_compartment(comp)
 
 	def read_compartments(self,file_path,do_show):
 		with open(file_path, "r") as csv_file:
@@ -606,60 +1005,68 @@ class DBBProblem_new():
 				deck=self._dictdecks.get(deck_code)
 				if deck is not None:
 					id_seg = str(row["Segment"])
+					id = str(row["Identifier"])
 					if id_seg != 'NO':
 						id_seg = 'S' + id_seg
+					else:
+						id_seg = 'NO'+id
 					segment = deck.get_segment(id_seg)
 					if segment is not None:
 						position = np.array([float(row["Ax"]), float(row["Ay"]), deck.position[2]])
 						size = np.array([float(row["b"]), float(row["a"]), deck.size[2]])
-						id = str(row["Identifier"])
+
 						type = str(row["Type"])
 						zone = str(row["Zone"])
 						comp = DBBCompartment(id,size,position,type,deck.hull,zone,segment)
-						comp.set_show(do_show)
+						comp.set_show(do_show and segment._show)
 						segment.add_compartment(comp)
 					else:
-						position = np.array([float(row["Ax"]), float(row["Ay"]), deck.position[2]])
-						size = np.array([float(row["b"]), float(row["a"]), deck.size[2]])
-						id = str(row["Identifier"])
-						type = str(row["Type"])
-						zone = str(row["Zone"])
-						segment = DBBSegment('NO_'+id, size, position, type, deck.hull, zone, deck)
-						segment.set_show(do_show)
-						deck.add_segment(segment)
-						comp = DBBCompartment(id, size, position, type, deck.hull, zone, segment)
-						comp.set_show(do_show)
-						segment.add_compartment(comp)
+						print("Error, segment should exist!")
 
 
-	def set_design_list(self,folder_path,sf_char):
+	def prepare_exported_data(self, folder_path, sf_char):
 		self._designs.clear()
+		wb_file=""
+		rsb_file = ""
+		sb_file = ""
 		if os.path.isdir(folder_path):
 			_, _, filenames = next(os.walk(folder_path))
 			for file in filenames:
 				i1_CB = file.find('_CB_exp')
-				i1_SB = file.find('_SB_exp')
-				i1 = max(i1_CB,i1_SB)
-				if i1 > -1:
-					key = file[:i1]
-					list = self._designs.get(key,['',''])
-					self._designs[key]=list
-					file_path = folder_path+sf_char+file
-					if i1_CB > -1:
-						list[1]=file_path
+				if i1_CB > -1:
+					key = file[:i1_CB]
+					self._designs[key]=folder_path+sf_char+file
+				else:
+					i1_WB = file.find('WB_exp')
+					i1_RSB = file.find('RSB_exp')
+					i1_SB = file.find('SB_exp')
+					if i1_WB > -1:
+						wb_file = folder_path+sf_char+file
+					elif i1_RSB > -1:
+						rsb_file = folder_path+sf_char+file
 					elif i1_SB > -1:
-						list[0]=file_path
+						sb_file = folder_path+sf_char+file
+
 				pass
 			pass
-
-	def set_portside_starboardside_visibility(self, show_portside, show_starbside)->Tuple[List[DBBBaseAll]]:
+		return wb_file,rsb_file,sb_file
+	def set_portside_starboardside_visibility(self, show_portside, show_starbside,do_force_add=False)->Tuple[List[DBBBaseAll]]:
 		allgeo = self.get_all_geometries()
 		for geo in allgeo:
 			geo.regenerate_mesh_port_starboard(show_portside,show_starbside)
 		geo_add =[]
-		geo_reb = self.get_all_visible_geometries(allgeo)
+		geo_reb = []
 		geo_del = []
+		if do_force_add:
+			geo_add = self.get_all_visible_geometries(allgeo)
+		else:
+			geo_reb = self.get_all_visible_geometries(allgeo)
 		return geo_add,geo_reb,geo_del
+
+	def set_geolist_portside_starboardside_visibility_(self,geolist:List[DBBBaseAll], show_portside, show_starbside)->List[DBBBaseAll]:
+		for geo in geolist:
+			geo.regenerate_mesh_port_starboard(show_portside,show_starbside)
+		return self.get_all_visible_geometries(geolist)
 
 	def get_changes_to_previous_state(self,ref_allgeo)->Tuple[List[DBBBaseAll]]:
 		allgeo = self.get_all_visible_geometries()
@@ -688,6 +1095,8 @@ class DBBProblem_new():
 
 	def get_all_geometries(self)->List[DBBBaseAll]:
 		geometires = []
+		for bulk in self.bulkheads:
+			geometires.append(bulk)
 		for deck in self.decks:
 			if deck.plate is not None:
 				geometires.append(deck.plate)
@@ -696,6 +1105,16 @@ class DBBProblem_new():
 			if deck.segments is not None:
 				for segment in deck.segments:
 					geometires.append(segment)
+					if segment is not None:
+						for compartment in segment.compartments:
+							geometires.append(compartment)
+		return geometires
+
+	def get_all_compartments(self)->List[DBBCompartment]:
+		geometires = []
+		for deck in self.decks:
+			if deck.segments is not None:
+				for segment in deck.segments:
 					if segment is not None:
 						for compartment in segment.compartments:
 							geometires.append(compartment)
@@ -722,8 +1141,73 @@ class DBBProblem_new():
 				dbb_designs = dbb_designs.replace( '/','\\')
 			hull_form_input = abspath+hull_form_input
 			dbb_designs = abspath + dbb_designs
-			self.set_design_list(dbb_designs,sf_char)
+			wb_file,rsb_file, sb_file = self.prepare_exported_data(dbb_designs, sf_char)
 			self.hull = DBBHullFormAll(hull_form_input)
+			return wb_file,rsb_file,sb_file
+
+	def _process_rsb_data(self,hullform:HullForm,z_dck:List[float], rsb_data: List[str]):
+		verts = rsb_data[2].strip()
+		splited = verts.split(" ")
+		points = []
+		for z in z_dck:
+			points.append([])
+		for i in range(0, len(splited), 2):
+			deck_points = None
+			xmin = xmax = 0
+			wlines = None
+			if splited[i].lower().startswith("p"):
+				wlines = hullform.wlinesPos
+			elif splited[i].lower().startswith("s"):
+				wlines = hullform.wlinesNeg
+			else:
+				x = float(splited[i])
+				y = float(splited[i + 1])
+				for i_z in range(len(z_dck)):
+					points[i_z].append(np.array([x, y, z_dck[i_z]]))
+
+			if wlines is not None:
+				deck_points = []
+				for z in z_dck:
+					xmin = float(splited[i][1:])
+					xmax = float(splited[i + 1][1:])
+					for wline in wlines:
+						if np.isclose(z, wline[0][2]):
+							deck_points.append((np.asarray(wline)).tolist())
+				tmp = -9999
+				if xmin > xmax:
+					tmp = xmin
+					xmin = xmax
+					xmax = tmp
+				for i_z in range(len(z_dck)):
+					deck_points[i_z] = self.trim_sorted_points_by_x_min_max(xmin, xmax, deck_points[i_z])
+					if tmp > -9999:
+						deck_points[i_z].reverse()
+					for p in deck_points[i_z]:
+						points[i_z].append(p)
+		return points
+
+	def trim_sorted_points_by_x_min_max(self, xmin, xmax, points):
+		trim_points = []
+		n_p = len(points)
+		x_tol = 0.0001
+		i = 0
+		while (i < n_p and points[i][0] < xmin):
+			i += 1
+		if i > 0 and (points[i][0] - x_tol) > xmin:
+			p = np.array([xmin, 0.0, points[i][2]])
+			p[1] = points[i - 1][1] + (points[i][1] - points[i - 1][1]) / (points[i][0] - points[i - 1][0]) * (
+						xmin - points[i - 1][0])
+			trim_points.append(p)
+		while (i < n_p and points[i][0] <= xmax):
+			trim_points.append(points[i])
+			i += 1
+		if i > 0 and i < n_p and (points[i - 1][0] + x_tol) < xmax:
+			p = np.array([xmax, 0.0, points[i][2]])
+			p[1] = points[i - 1][1] + (points[i][1] - points[i - 1][1]) / (points[i][0] - points[i - 1][0]) * (
+						xmax - points[i - 1][0])
+			trim_points.append(p)
+
+		return trim_points
 
 		
 		
