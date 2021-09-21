@@ -17,7 +17,7 @@ from typing import Set,Dict,List
 
 class HullFormMeshQuality:
     def __init__(self):
-        self._numWL = 50
+        self._numWL = 20
         self._numPnWLhalf = 20
         self._distPolyOrder=3
 
@@ -460,6 +460,7 @@ class HullForm(Geometry):
 
     def genHullFormMeshPP(self, lines: list):
         mesh = om.TriMesh()
+        om.PolyMesh()
         wlinesPos = lines[0]  # positive y waterlines
         wlinesNeg = lines[1]  # negative y waerlines
         wlKeel = lines[2]  # keel waterline (one waterline)

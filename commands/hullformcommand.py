@@ -92,8 +92,6 @@ class HullFormCommand(Command):
             self.hf_resistCurves.setCurrentHullForm(self.hf)
             self.hf_resistCurves.exec()
 
-
-
 class HullFormImporter(IOHandler):
     def __init__(self):
         super().__init__()
