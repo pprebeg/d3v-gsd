@@ -8,6 +8,7 @@ import csv
 from typing import List, Dict,Tuple
 from hullformdir.hullform import HullForm
 
+
 class HstarBase(ExtendedGeometry):
 	def __init__(self, id):
 		super().__init__()
@@ -166,13 +167,19 @@ class HstarBase(ExtendedGeometry):
 		pass
 
 class HstarHullForm(HstarBase):
-	def __init__(self, fileName):
+	def __init__(self, fileName,num_frames,n_trans_sec,draught):
 		super().__init__(0)
 		self._hullform:HullForm = HullForm(fileName)
+		self.shipdata=self._hullform.shipdata
 		self._position = np.array([0., 0., 0.])
 		self._centroid = np.array([self.LOA / 2, 0, 0])  # sredina samo za x za sada
+		self._T=draught
+
 		#self.mesh = self._hullform.mesh
-		self.mesh=self.generateHSMSH()
+		#self.mesh=self.genPolyMesh()
+		#num_frames=300
+		#n_trans_sec=100
+		self.mesh=self._getHSMesh(num_frames,n_trans_sec)
 
 	@property
 	def deck_indexes(self):
@@ -186,46 +193,59 @@ class HstarHullForm(HstarBase):
 		deck_index = self._hullform.dict_decks.get(deck_code)
 		return self.get_deck_z_index(deck_index)
 
+	def _getHSMesh(self, N_long=80, N_tocz=21):
+		t=self.T
+		self.mesh=self._genHSMesh(N_long,N_tocz,self.T)
+		return self.mesh
+
 	@property
 	def centroid(self):
 	    return self._centroid
 
 	@property
+	def T(self):				#waterline value, real draft
+		return self._T
+	@property
+	def setDrfat(self,value):
+		self._T=value
+
+	@property
 	def LOA(self):
-	    return self._hullform.shipdata["loa_val"]
+	    return self.shipdata["loa_val"]
 
 	@property
 	def BOA(self):
-		return self._hullform.shipdata["boa_val"]
+		return self.shipdata["boa_val"]
 
 	@property
-	def D(self):
-		return self._hullform.shipdata["draft_val"]
+	def D(self):								#geometry form draft
+		return self.shipdata["draft_val"]
 
 	@property
 	def name(self):
-		return self._hullform.shipdata["shipname"]
+		return self.shipdata["shipname"]
 
 	@property
 	def wlinesPos(self):
-		return self._hullform.wlinesPos
+		wlinesPos=self._hullform.wlinesPos
+		return wlinesPos
 	@property
 	def wlinesNeg(self):
-		return self._hullform.wlinesNeg
+		wlinesNeg=self._hullform.wlinesNeg
+		return wlinesNeg
 
 	@property
 	def wlKeel(self):
-		return self._hullform.wlKeel
+		wlKeel=self._hullform.wlKeel
+		return wlKeel
+
 	@property
 	def slope(self):
-		return self._hullform.shipdata["sa_val"]
-	@property
-	def slope(self):
-		return self._hullform.shipdata["sa_val"]
+		return self.shipdata["sa_val"]
 
 	@property
 	def transomTip(self):
-		transomTip=self._hullform.shipdata["draft_val"] * self._hullform.shipdata["td_val"]
+		transomTip=self.shipdata["draft_val"] * self.shipdata["td_val"]
 		return transomTip
 
 	@property
@@ -234,54 +254,225 @@ class HstarHullForm(HstarBase):
 		return x0
 
 
-	def _genMesh(self):
-		pass
+
+	def _genHSMesh(self,N_long,N_tocz,T):
+
+		step=self.LOA/N_long
+		xPos=self.getXposition(0,self.LOA+step,step)
+		xPos=list(filter(lambda x:x>self.x0,xPos))
+
+		wlPos=self.getWLPositions(T)
+		lines=self._hullform.hullGen(self.shipdata,wlPos,20,xPos)
+
+		frames=self.genFramesfromWL(lines, xPos)
+		mshfr=self.genFramesforMesh(frames,N_tocz)
+
+		meshFrames=mshfr
+		mesh=self.genHSHullFormMeshPP(meshFrames)
+
+		return mesh
+
+	def genFramesforMesh(self,frames:list,num_points=21):
+
+		meshFrames=[]
+		frCL=frames[0]
+		transomFrame=frames[0]
+
+		frames=frames[1:]
+
+		mid=round(len(frames)/2)-1
+		frame=frames[mid][1:]
+		n1,n2=self.transveresePanelDistribution(num_points,frame)
+
+		aft_fr=self.generatePointsforMeshAft(frCL,transomFrame,n2)
+		meshFrames.append(aft_fr)
+
+		for frame in frames:
+			#frame=frames[i]
+			xfr=frame[0][0]
+			frame.pop(0)
+			frame=np.array(frame)
+			frame=np.transpose(frame)
+
+			yf=frame[0]
+			zf=frame[1]
+			pTyp=frame[2]
+
+			fr=self.genFramePointsforMesh(xfr,yf,zf,pTyp,num_points,n1)
+			meshFrames.append(fr)
+		return meshFrames
+
+	def transveresePanelDistribution(self,N,frame:list): ###OBAVAZENO ZACRŠI!!!
+
+		n0=N-3
+		n1=1
+		n2=n0-n1
+
+		frame=np.array(frame)
+		frame=np.transpose(frame)
+
+		pTyp=frame[2]
+		yf=frame[0]
+		zf=frame[1]
+
+		yd = np.diff(yf)
+		zd = np.diff(zf)
+
+		dist=np.sqrt(yd**2+zd**2)
+		u=np.cumsum(dist)
+		u=np.hstack([[0],u])
+		utr=u*pTyp
+		S_opt=u.max()/(N-1)
+		f_min=[]
+
+		for n1 in range(2,n0):
+			#n1=i+1
+			n2=N-n1
+			t1=np.linspace(0,utr.max(),n1,endpoint=False)
+			t2=np.linspace(utr.max(),u.max(),n2)
+			t = np.concatenate((t1, t2))
+
+			yn=np.interp(t,u,yf)
+			zn=np.interp(t,u,zf)
+
+			yd2 = np.diff(yn)
+			zd2 = np.diff(zn)
+			dist2 = np.sqrt(yd2 ** 2 + zd2 ** 2)
+			u2 = np.cumsum(dist2)
+			u2 = np.hstack([[0], u2])
+			S=u2[1]
+			f_min.append(abs((S_opt-S)/S_opt))
+
+
+
+		min1=min(f_min)
+		n1=f_min.index(min1)
+		n2=N-n1
+		return n1,n2
+
+
+
+
+	def genFramePointsforMesh(self,xfr,yf:np.ndarray,zf:np.ndarray,pTyp:np.ndarray,num_points:int,n1:int):
+
+		yd = np.diff(yf)
+		zd = np.diff(zf)
+		dist = np.sqrt(yd ** 2 + zd ** 2)
+		u = np.cumsum(dist)
+		u = np.hstack([[0], u])
+		utr=u*pTyp
+		#n1=6
+		n2=num_points-n1
+
+		if zf[0]>=(0.9*self.transomTip) and xfr>self.LOA/2:			#generiranje točaka na pramčanim rebrima
+			t=np.linspace(0,u.max(),num_points)
+
+		else:														#ostala rebra
+			t1 = np.linspace(0, utr.max(), n1,endpoint=False)
+			t2=np.linspace(utr.max(),u.max(),n2)
+			t=np.concatenate((t1,t2))
+
+		xn=np.full(num_points,xfr)
+		yn = np.interp(t, u, yf)
+		zn = np.interp(t, u, zf)-self.T
+		frame=np.stack((xn,yn,zn),axis=1)
+		return frame
+
+	def generatePointsforMeshAft(self,frCL,transomFrame,num=15):
+		frCL=np.array(frCL)
+		trFrame=np.array(transomFrame)
+		frCL.transpose()
+		trFrame=np.transpose(trFrame)
+
+		xf=trFrame[0]
+		yf=trFrame[1]
+		zf=trFrame[2]
+
+		xd=np.diff(xf)
+		yd = np.diff(yf)
+		zd = np.diff(zf)
+
+		dist=np.sqrt(xd**2+yd**2+zd**2)
+		u=np.cumsum(dist)
+		u=np.hstack([[0],u])
+
+		t=np.linspace(0,u.max(),num)
+
+
+		xn=np.interp(t, u, xf)
+		yn = np.interp(t, u, yf)
+		zn = np.interp(t, u, zf)-self.T
+
+		frame=np.stack((xn,yn,zn),axis=1)
+
+		#geometry condition
+
+		diff=np.diff(frame,axis=0)
+		diff=np.transpose(diff)
+		tan=diff[2]/diff[1]
+		ind=np.where(tan>=0.4)
+		i1=np.min(ind)
+		hpt=i1+1
+		vpt=len(frame)-hpt
+		i2=np.max(ind)
+
+		f1=np.array_split(frame,[hpt])
+		#f2=f1[0]
+		#f3=np.transpose(f1[1])
+		f2=np.flip(frame[:hpt,:],axis=0)
+		f3=frame[i1+1:,:]
+
+		x2=np.full((hpt,vpt),f3[:,0]).T
+		y2 = np.linspace(f3[:, 1],0,hpt).T
+		z2 = np.full((hpt,vpt),f3[:,2]).T
+
+		#x3=np.transpose(np.full((i1,i1),f3[0]))
+		#y3=np.transpose(np.linspace(f3[1],0,i1))
+		#z3 = np.transpose(np.full((i1,i1),f3[2]))
+
+
+		aft = np.stack((x2, y2, z2), axis=2)
+		aft=np.insert(aft,0,f2,axis=0)
+		a=np.transpose(aft,(1,0,2))
+		#aft=np.stack((aft,f2))
+
+		return a
 
 	#Hstar geometry
-	def getNewPointsonWL(self):
+	def getNewPointsonWL(self,xPos):
+
 		wlinesPos=self.wlinesPos
 		wlKeel=self.wlKeel
-		loa=self.LOA
-		#slope = self.slope
 		draft = self.D
 		transomTip = self.transomTip
-		#deck = wlinesPos[0][0][2]
-		xPos=self.getXpositions()
-		#x0 = self.x0
 		wlinesPos=self.clearWLframes(wlinesPos)
-		#nfr = 20
-		#nsec = nfr - 1
-		#r = loa / nfr
+
 		frames=[]
-		#wlframes = []
+		fmsh=[]
+		transomFrame=[]
 		cla = []
 		clf = []
 		for i in range(len(xPos)-1):
 			frames.append([])
+			fmsh.append([])
+		z=0
 		for wl in wlinesPos:
-			#wlframe = []
-			#xfr = r
 			k=0
 			xfr=xPos[k]
-			#r0 = 1
-			#z = 0
+
 			if wl[0][2]<=draft:
 				cla.append(wl[0])
 				clf.append(wl[-1])
-			#b=False
-			"""if wl[0][2] >= transomTip:  # problem R0, x=x_transomTip
-				xfr = x0
-				r0 = 0
-				b = True
-			if wl[0][0] > xfr or wl[1][0] > xfr:  # rijiešen problem vl 12-23
-				a = wl[0][0] // 5
-				xfr = (a + 1) * r
-				r0 = 0"""
+				if wl[0][2]>=transomTip:
+					transomFrame.append(wl[z].tolist())
+					z=1
+
 			for i in range(0, len(wl) - 1):
 				j = i
 				p1 = wl[j]
 				p2 = wl[j + 1]
 				zp = p1[2]
+
 				while p1[0]>xfr:
 					k+=1
 					xfr=xPos[k]
@@ -291,44 +482,27 @@ class HstarHullForm(HstarBase):
 						yp = p1[1] + (p2[1] - p1[1]) / (p2[0] - p1[0]) * (xfr - p1[0])
 						if np.isclose(zp,transomTip):
 							pointType=1
+
 						else:
 							pointType=0
+
 						ip = [yp, zp,pointType]
-						#wlframe.append(ip)
+
 						frames[k].append(ip)
+						fmsh[k].append([xfr,yp,zp])
 						k+=1
 						xfr=xPos[k]
 
 
-				"""if p1[0] <= xfr and p2[0] > xfr:
-					yp = p1[1] + (p2[1] - p1[1]) / (p2[0] - p1[0]) * (xfr - p1[0])
-					ip = [xfr, yp, zp]
-					wlframe.append(ip)
-					#xfr += r
-					k=+1
-					xfr=xPos[k]
-
-
-					if b and zp < deck and zp > transomTip and z == 0:
-						xfr = xfr - x0
-						z = 1"""
-
-			#wlframes.append(wlframe)
-		#xfram=frames[0][0][0]
-		#b=[]
-
 		cla.reverse()
 		wlKeel = cla + wlKeel + clf
-		#xfr = x0
 		wlframeK = []
 		k=0
 		xfr=xPos[k]
 		for ii in range(len(wlKeel) - 1):
-			#if len(wlframeK) == 1:
-				#xfr = r
-			#xfr=xPos[k]
 			p1 = wlKeel[ii]
 			p2 = wlKeel[ii + 1]
+
 			while p2[0]>xfr:
 				if p1[0]<=xfr:
 					yp = p1[1] + (p2[1] - p1[1]) / (p2[0] - p1[0]) * (xfr - p1[0])
@@ -340,27 +514,26 @@ class HstarHullForm(HstarBase):
 
 		k=0
 		for frame in frames:
-			#b.append(frame)
-			#xfram=frame[1][0]
-
 			zp=wlframeK[k][2]
+
 			if np.isclose(zp, transomTip):
 				pointType = 1
+
 			else:
 				pointType = 0
-			#ip = [yp, zp, pointType]
+
 			point=[wlframeK[k][1],wlframeK[k][2],pointType]
-			#point.
 			frame.insert(0,point)
+			fmsh[k].insert(0,[wlframeK[k][0],wlframeK[k][1],wlframeK[k][2]])
 			fr = [xPos[k], len(frame)]
 			frame.insert(0,fr)
 			k+=1
 
+		frames.insert(0,transomFrame)
 
-		#wlframes.insert(0,wlframeK)
-		#wlframes=self.clearWLframes(wlframes)
 
-		return frames
+
+		return frames,fmsh
 
 	def getInstersectionPoint(self,p1,p2,x):
 		zp = p1[2]
@@ -386,11 +559,13 @@ class HstarHullForm(HstarBase):
 		l=l.tolist()
 		return l
 
-	def getAdditionalFrames(self, wlinesPos, wlframes, clf):
+	def getWLPositions(self, T):
+		w1=np.linspace(0,self.transomTip,20,endpoint=False)
+		w2=np.linspace(self.transomTip,T,20)
+		wPos=np.concatenate((w1,w2))
+		#wPos=np.flip(wPos)
+		return wPos
 
-		for wl in wlinesPos:
-			print()
-		pass
 
 	def clearWLframes(self, wlframes):
 		draft = self.D
@@ -404,56 +579,116 @@ class HstarHullForm(HstarBase):
 		return wlframes
 
 
-	def getFrames(self,n):
-		ind = []
-		# ind.append(x0)
-		slope = self.slope
-		draft = self.D
-		transomTip = self.transomTip
-		loa=self.LOA
-		wlframes = self.getNewPointsonWL(loa, self.wlinesPos, self.wlKeel)
-		xPos=self.getXpositions()
-		# deck = wlinesPos[0][0][2]
-		x0 = self.x0
-		r = loa / n
-		frames = []
+	def genFramesfromWL(self, lines:list, xPos:list):
+
+		draft=self.D
+		transomTip=self.transomTip
+
+		wlinesPos=lines[0]
+		wlinesNeg=lines[1]
+		wlKeel=lines[2]
+
+		xmax=wlinesPos[-1][-1][0]
+		xPos = list(filter(lambda x: x <= xmax, xPos))
+
+
+		frames=[]
+		transomFrame=[]
+		#frCL=[]
+		cla = []
+		clf = []
+		k=0
 		for i in range(len(xPos)):
 			frames.append([])
-		for wl in wlframes:
-			for p in wl:
-				if p[0] < r:
-					i = 0
-				else:
-					i = p[0] // r
-					i = int(i)
-				frames[i].append(p)
 
-		newframes = []
+		for wl in wlinesPos:
+
+			if wl[0][2]<=draft:
+				cla.append(wl[0])
+				clf.append(wl[-1])
+				wl.pop(-1)
+				if wl[0][2]>transomTip:
+					#frCL.append(wl[0].tolist())
+					transomFrame.append(wl[1].tolist())
+					wl.pop(0)
+					wl.pop(0)
+				elif wl[0][2]==transomTip:
+					transomFrame.append(wl[0].tolist())
+					wl.pop(0)
+				elif wl[0][2]<transomTip:
+					wl.pop(0)
+
+
+
+			for i in range(0,len(wl)):
+				p=wl[i]
+				xp=p[0]
+				yp=p[1]
+				zp=p[2]
+
+				if np.isclose(zp,transomTip):
+					pointType=1
+				else:
+					pointType=0
+				point=[yp,zp,pointType]
+
+				ind=xPos.index(xp)
+				frames[ind].append(point)
+
+		cla.reverse()
+		wlKeel = cla + wlKeel + clf
+		wlK=np.array(wlKeel)
+		x=wlK[:,0]
+		xK=np.array(xPos)
+		yK=np.interp(xK,x,wlK[:,1])
+		zK=np.interp(xK,x,wlK[:,2])
+		wlK=np.stack((xK,yK,zK),axis=1)
+		wlK=np.delete(wlK,-1,axis=0)
+
+
+		k=0
+		for p in wlK:
+			yp=p[1]
+			zp=p[2]
+			if np.isclose(zp, transomTip):
+				pointType = 1
+			else:
+				pointType = 0
+			point = [yp, zp, pointType]
+			frames[k].insert(0,point)
+			k+=1
+
+		k=0
 		for frame in frames:
-			newframe = []
-			xfr = frame[0][0]
-			# newframe.append([frame[0][0],len(frame)])
-			for p in frame:
-				# newframe.append([p[0],len(frame)])
-				# np=p.pop(0)
-				if np.isclose(p[2], transomTip) and p[0]<=loa/2:
-					pointType = 1
-				else:
-					pointType = 0
-				p.append(pointType)
-				del p[0]
-				newframe.append(p)
-			newframe.insert(0,[xfr, len(frame)])
-			#newframe.reverse()
-			newframes.append(newframe)
-		return newframes
+			xfr=xPos[k]
+			num_p=len(frame)
+			frame.insert(0,[xfr,num_p])
+			k+=1
 
-	def generateHSMSH(self):
+		bowfr=[]
+		bowp=clf[-1]
+		bowfr.insert(0,[bowp[0],1])
+		bowfr.append([bowp[1],bowp[2],0])
+		frames[-1]=bowfr
+
+		frames.insert(0,transomFrame)
+
+		return frames
+
+	# Form modification
+	def setShipData(self):
+		pass
+
+	def genHSHull(self):
+		pass
+
+	#PolyMesh mesh
+	def genPolyMesh(self):
 		lines=[self.wlinesPos,self.wlinesNeg,self.wlKeel]
-		mesh=self.genHullFormMeshPP(lines)
+		mesh=self.genPolyHullFormMeshPP(lines)
 		return mesh
 
-	def _genFaces(self, mesh: om.PolyMesh, whs: list, doReverse: bool):
+	def _genPolyFaces(self, mesh: om.PolyMesh, whs: list, doReverse: bool):
 		nl = len(whs)
 		npt = len(whs[0])
 		for iL in range(1, nl):
@@ -462,29 +697,35 @@ class HstarHullForm(HstarBase):
 			dip = 0
 			if npt_iL > npt_iL_1:
 				if doReverse:
-					mesh.add_face(whs[iL][0],whs[iL - 1][0], whs[iL][1] )
+					mesh.add_face(whs[iL - 1][0],whs[iL][0], whs[iL][1] )
+					mesh.add_face(whs[iL-1][0], whs[iL][1], whs[iL - 1][1])
+					mesh.add_face(whs[iL - 1][1], whs[iL][1], whs[iL][2])
+				else:
+					mesh.add_face(whs[iL - 1][0], whs[iL][1], whs[iL][0] )
 					mesh.add_face(whs[iL-1][0], whs[iL - 1][1], whs[iL][1])
 					mesh.add_face(whs[iL - 1][1], whs[iL][2], whs[iL][1])
-				else:
-					mesh.add_face(whs[iL][1], whs[iL][0], whs[iL - 1][0])
 				dip = 1
 			for ipL_1 in range(dip, npt_iL_1-1):
-				#ip = ipL_1 + dip
 				if doReverse:
-					mesh.add_face(whs[iL - 1][ipL_1], whs[iL-1][ipL_1+1], whs[iL][ipL_1+1+dip],whs[iL][ipL_1+dip])
-					#mesh.add_face(whs[iL - 1][ipL_1 - 1], whs[iL][ip - 1], whs[iL][ip])
+					mesh.add_face(whs[iL - 1][ipL_1], whs[iL][ipL_1+dip], whs[iL][ipL_1+1+dip], whs[iL-1][ipL_1+1])
 				else:
-					mesh.add_face(whs[iL - 1][ipL_1 - 1], whs[iL - 1][ipL_1], whs[iL][ip])
-					mesh.add_face(whs[iL - 1][ipL_1 - 1], whs[iL][ip], whs[iL][ip - 1])
+					mesh.add_face(whs[iL - 1][ipL_1], whs[iL-1][ipL_1+1], whs[iL][ipL_1+1+dip], whs[iL][ipL_1+dip])
 
-	def genHullFormMeshPP(self, lines: list):
+
+	def genPolyHullFormMeshPP(self, lines: list):
 		mesh = om.PolyMesh()
 		om.PolyMesh()
-		wlinesPos = lines[0]  # positive y waterlines
-		wlinesNeg = lines[1]  # negative y waerlines
+		wlinesPos = self.clearWLframes(lines[0])  # positive y waterlines
+		wlinesNeg = self.clearWLframes(lines[1])  # negative y waerlines
 		wlKeel = lines[2]  # keel waterline (one waterline)
-		#wlinesPos.reverse()
-		#wlinesNeg.reverse()
+		rlines=wlinesPos
+		rlines.insert(0,wlKeel)
+		rlines=self.reverseZcoordinate(rlines)
+		wlKeel = rlines[0]
+		wlinesPos=rlines
+		wlinesPos.pop(0)
+
+		#wlinesPos=self.reverseZcoordinate(wlinesPos)
 
 		whsPos = []
 		whsNeg = []
@@ -502,13 +743,140 @@ class HstarHullForm(HstarBase):
 		for wl in wlinesNeg:
 			whsi = []
 			whsNeg.append(whsi)
-			for p in wl:
-				whsi.append(mesh.add_vertex(p))
+#			for p in wl:
+#				whsi.append(mesh.add_vertex(p))
 
-		self._genFaces(mesh, whsPos, True)
+		self._genPolyFaces(mesh, whsPos, True)
 		#self._genFaces(mesh, whsNeg, False)
 
 		return mesh
+
+	def reverseZcoordinate(self,wlines):
+		draft=self.D
+		vl=[]
+		#wlines.tolist()
+		for wl in wlines:
+			points=[]
+			for p in wl:
+				point=[]
+				zp=p[2]-draft
+				point=[p[0],p[1],zp]
+				points.append(point)
+			vl.append(points)
+
+		return vl
+
+
+	#Hstra -hsmsh generatoion (faces/generator)
+
+	def _genHSFaces(self, mesh: om.PolyMesh, whs: list,ahs:list, doReverse: bool):
+
+		#aft mesh generation
+		nl=len(ahs)
+		npt=len(ahs[0])
+		f0=[]
+		#f0.append(ahs[0][0])
+		for iL in range(1,nl):
+			npt_iL=len(ahs[iL])
+			#npt_iL_1 = len(ahs[iL + 1])
+			f0.append(ahs[iL-1][0])
+			for ipL in range(0,npt_iL-1):
+				if doReverse:
+					mesh.add_face(ahs[iL-1][ipL], ahs[iL-1][ipL+1],ahs[iL][ipL+1],ahs[iL][ipL])
+
+				else:
+					mesh.add_face(ahs[iL-1][ipL], ahs[iL-1][ipL+1],ahs[iL][ipL+1],ahs[iL][ipL])
+
+		f0=f0+ahs[-1]
+		f1=whs[0]
+		npf0=len(f0)
+		npf1=len(f1)
+		ntrf1=npf1-npf0
+
+		for i in range(0,ntrf1):
+			if doReverse:
+				mesh.add_face(f0[0],f1[i+1],f1[i])
+			else:
+				mesh.add_face(f0[0], f1[i], f1[i + 1])
+
+		i=0
+		for ii in range(ntrf1,npf1-1):
+			if doReverse:
+				mesh.add_face(f0[i],f0[i+1],f1[ii+1],f1[ii])
+			else:
+				mesh.add_face(f0[i],f0[i+1],f1[ii+1],f1[ii])
+			i+=1
+
+
+
+
+
+		#middle mesh generation
+		nl = len(whs)
+		npt = len(whs[0])
+		for iL in range(1, nl-1):
+			npt_iL = len(whs[iL])
+			npt_iL_1 = len(whs[iL - 1])
+			dip = 0
+			for ipL_1 in range(dip, npt_iL_1-1):
+				if doReverse:
+					mesh.add_face(whs[iL - 1][ipL_1], whs[iL-1][ipL_1+1], whs[iL][ipL_1+1], whs[iL][ipL_1])
+
+				else:
+					mesh.add_face(whs[iL - 1][ipL_1], whs[iL-1][ipL_1+1], whs[iL][ipL_1+1], whs[iL][ipL_1])
+
+		#bow peak mesha generation
+		npt_iL_1=len(whs[-2])
+		for ipL_1 in range(0, npt_iL_1 - 1):
+			if doReverse:
+				mesh.add_face(whs[-2][ipL_1], whs[-2][ipL_1 + 1],whs[-1][0])
+
+			else:
+				mesh.add_face(whs[-2][ipL_1], whs[-2][ipL_1 + 1],whs[-1][0])
+
+	def genHSHullFormMeshPP(self, frames: list): #Hstar mesh generator
+		mesh = om.PolyMesh()
+		om.PolyMesh()
+		aft=np.flip(frames[0],axis=0)
+		frames=frames[1:]
+		frames[-1]=[frames[-1][0]]
+
+
+		ahsPos=[]
+		fhsPos = []
+		whsNeg = []
+		whsi = []
+		ahsi=[]
+		#fhsPos.append(whsi)
+		#ahsPos.append(ahsi)
+		#whsNeg.append(whsi)
+
+		for frame in frames:
+			whsi = []
+			fhsPos.append(whsi)
+			for p in frame:
+				whsi.append(mesh.add_vertex(p))
+
+		for line in aft:
+			ahsi=[]
+			ahsPos.append(ahsi)
+			for p in line:
+				ahsi.append(mesh.add_vertex(p))
+
+		"""for wl in wlinesNeg:
+			whsi = []
+			whsNeg.append(whsi)
+		#			for p in wl:
+		#				whsi.append(mesh.add_vertex(p))
+		whsPos_2=wlinesPos
+		whsPos_2.insert(0,wlKeel)""" #negative frames, additional option
+
+		self._genHSFaces(mesh, fhsPos,ahsPos, True)
+		# self._genFaces(mesh, whsNeg, False)
+
+		return mesh  #
+
+
 
 	def get_info(self) -> str:
 		msg="Ship: "+self.name
@@ -536,12 +904,23 @@ class HstarProblem():
 	def num_frames(self, new_value):
 		self._num_frames = new_value
 
+	@property
+	def num_trans_sections(self):
+	    return self._num_trsec
+
+	@num_frames.setter
+	def num_trans_sections(self, new_value):
+		self._num_trsec = new_value
+
+
 	def read_problem(self):
 		with open(self._filename, "r") as csv_file:
 			csv_reader = csv.DictReader(csv_file)
 			for row in csv_reader:  # each row contains 1 block data
 				hull_form_input = str(row["hull_form_file"])
 				n_fr = int(row["num_frames"])
+				n_trp = int(row["num_transverse_points"])
+				draught = float(row["calculation_draught"])
 
 			abspath1 = '\\'.join(self._filename.split('\\')[0:-1])
 			abspath2 = '/'.join(self._filename.split('/')[0:-1])
@@ -556,4 +935,4 @@ class HstarProblem():
 
 			hull_form_input = abspath + hull_form_input
 
-			return HstarHullForm(hull_form_input)
+			return HstarHullForm(hull_form_input,n_fr,n_trp,draught)

@@ -64,6 +64,7 @@ class HullFormCommand(Command):
 
     @Slot()
     def registerHullForm(self, hullForm):
+        #print(type(hullForm))
         if isinstance(hullForm, HullForm):
             self.hf=hullForm
             self.menuMain.setEnabled(True)
@@ -176,6 +177,7 @@ class DialogHullFormModify(QDialog):
         self.shipdatamins =0
         self.shipdatamaxs =0
         self.shipdatatxt = {}
+
 
 
     def initDicts(self):
@@ -554,6 +556,7 @@ class CustomTableModel(QAbstractTableModel):
         self.input_names = []
         self.mapping = {}
         self.column_count = 0
+
         self.row_count = 0
 
 

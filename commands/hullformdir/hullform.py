@@ -17,8 +17,8 @@ from typing import Set,Dict,List
 
 class HullFormMeshQuality:
     def __init__(self):
-        self._numWL = 20
-        self._numPnWLhalf = 20
+        self._numWL = 40
+        self._numPnWLhalf = 40
         self._distPolyOrder=3
 
     @property
@@ -34,8 +34,11 @@ class HullFormMeshQuality:
         x.reverse()
         return x
 
-    def genWLPositions(self,hWL_top,  hWL_bottom ):
-        wlPos = self._getDistribution(hWL_top, hWL_bottom, self._numWL, self._distPolyOrder)
+    def genWLPositions(self,hWL_top,  hWL_bottom,hst=None ):
+        if hst is not None:
+            wlPos = self._getDistribution(hWL_top, hWL_bottom, hst,1)
+        else:
+            wlPos = self._getDistribution(hWL_top, hWL_bottom, self._numWL, self._distPolyOrder)
         return wlPos
     def genWLPositionsUsingObligatory(self,obligatoryLines:list ):
         testLines = self._getDistribution(obligatoryLines[0], obligatoryLines[-1], self._numWL, self._distPolyOrder)
@@ -553,10 +556,12 @@ class HullForm(Geometry):
                 aftEnd.append(AE)
                 pdecks2.append(pdecks[i])
 
+
             else:  # For each deck that is in the superstructure
                 aftEndS.append((pdecks[i] - shipdata["draft_val"]) * Math.tan(slope))
                 bowRakeS.append(shipdata["loa_val"] - ((pdecks[i] - shipdata["draft_val"]) * Math.tan(slope)) - keelFwd)
                 pdecks3.append(pdecks[i])
+
 
         for i in range(len(midBeam)):  # Assign values to variables above cont.
             noseConeBaseRadius.append(midBeam[i] - transomBeam[i])
@@ -577,7 +582,16 @@ class HullForm(Geometry):
                     deckOutlinesHull[idk].append([aftEnd[idk], 0])
                 kmin = aftEnd[idk]
                 kmax = shipdata["loa_val"] / 2
-                klist = np.linspace(kmin, kmax, nump)
+                if frame_positions is not None:
+                 klist=[]
+                 klist.append(kmin)
+                 for pos in frame_positions:
+                     if pos>kmin and pos<=kmax:
+                         klist.append(pos)
+                 #klist.append(kmax)
+                else:
+                    klist = np.linspace(kmin, kmax, nump)
+
                 for xpt in klist:
                     deckOutlinesHull[idk].append([xpt, (
                                 Math.sqrt(Math.pow(ogiveRadius[idk], 2) - Math.pow(xpt - shipdata["loa_val"] / 2, 2)) +
@@ -585,7 +599,15 @@ class HullForm(Geometry):
 
                 kmin = shipdata["loa_val"] / 2
                 kmax = keelFwd + bowRake[idk]
-                klist = np.linspace(kmin, kmax, nump)
+                if frame_positions is not None:
+                 klist=[]
+                 #klist.append(kmin)
+                 for pos in frame_positions:
+                    if pos>kmin and pos<=kmax:
+                        klist.append(pos)
+                 klist.append(kmax)
+                else:
+                    klist = np.linspace(kmin, kmax, nump)
                 for xpt in klist:
                     eqX = (xpt - shipdata["loa_val"] / 2) / (
                                 keelFwd + bowRake[idk] - (shipdata["loa_val"] / 2))  # Value of x in JC equation
@@ -596,7 +618,16 @@ class HullForm(Geometry):
             else:  # If keel draw top
                 kmin = aftEnd[idk]
                 kmax = (keelFwd + bowRake[idk])
-                klist = np.linspace(kmin, kmax, nump * 2)
+                if frame_positions is not None:
+                 klist=[]
+                 klist.append(kmin)
+                 for pos in frame_positions:
+                    if pos>kmin and pos<kmax:
+                        klist.append(pos)
+                 klist.append(kmax)
+                else:
+                    klist = np.linspace(kmin, kmax, nump*2)
+
                 for xpt in klist:
                     deckOutlinesHull[idk].append([xpt, 0])  # Straight line
 
