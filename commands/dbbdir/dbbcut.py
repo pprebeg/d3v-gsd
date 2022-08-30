@@ -121,9 +121,9 @@ def line_plane_inter3(tp, pp):		#assumption is that tp and pp are in pairs with 
 	sets = np.full((pi.shape[0],2,3), 0.0)
 	original_indices = set(range(pi.shape[0]))
 	bool = np.isnan(pi)
-	nan_i = bool.all(2).any(1)	#indices where set has nan
+	nan_i = bool.all(2).any(1)	#dofs where set has nan
 	dup_i = ~nan_i
-	# dup_i = (~bool).all(2).all(1) 	#indices with duplicates from vertex intersections, have no nans
+	# dup_i = (~bool).all(2).all(1) 	#dofs with duplicates from vertex intersections, have no nans
 	# print(pi)
 	# print(bool)
 	# print(nan_i, dup_i)
@@ -374,7 +374,7 @@ def tri_tri_inter2(tri1, tri2):
 	
 	intersecting_indices = (intersect2d(indices1, np.flip(indices2, 1))).T
 	s1 = inter1[tuple(intersecting_indices)]
-	s2 = inter2[tuple(np.flip(intersecting_indices, 0))]		#indices are flipped for data2 because triangle and plane points are reversed in order tri_plane_inter(tri2,tri1) 
+	s2 = inter2[tuple(np.flip(intersecting_indices, 0))]		#dofs are flipped for data2 because triangle and plane points are reversed in order tri_plane_inter(tri2,tri1)
 	
 	#remove segment pairs where points of segment are same:
 	# print(intersecting_indices)
@@ -398,7 +398,7 @@ def segment_inter2(s1,s2): #segments are paralel and colinear, match eachother b
 	# print(s2.shape[0])
 	
 	line_vectors = s1[:,1] - s1[:,0]
-	i = np.where(~np.isclose(line_vectors , 0))		#find indices of where line vector is not 0
+	i = np.where(~np.isclose(line_vectors , 0))		#find dofs of where line vector is not 0
 	
 	# print(np.isclose(line_vectors , 0).all(-1))
 	# print(line_vectors, i)				#tu nes krivo
@@ -408,7 +408,7 @@ def segment_inter2(s1,s2): #segments are paralel and colinear, match eachother b
 	return_index = data[1]
 	unique_axis_1 = np.expand_dims(i[1][return_index],0)
 	
-	unique_i = np.append(unique_axis_0, unique_axis_1, 0)		#indices of first points of set lines that are not 0
+	unique_i = np.append(unique_axis_0, unique_axis_1, 0)		#dofs of first points of set lines that are not 0
 	v1 = s1[unique_i[0],:,unique_i[1]]		#v are projected points, never has 2 same points in row
 	v2 = s2[unique_i[0],:,unique_i[1]]	
 	# print("v1")
@@ -558,9 +558,9 @@ def unique_close2(a, axis = 0, return_indices = False, return_counts = False):		
 	isclose_bool = np.tril(isclose_bool)		#remove upper tri duplicates		#if triu the last instance of duplicate array will be removed
 	diag_indices = np.diag_indices(isclose_bool.shape[axis])
 	
-	if axis > 0:	#no need for multidim indices #!!!!!!!!!!!jos treba prosiriti za dim > 1
+	if axis > 0:	#no need for multidim dofs #!!!!!!!!!!!jos treba prosiriti za dim > 1
 		i = a.shape[0]
-		x1 = np.expand_dims(np.concatenate([np.arange(i)]*isclose_bool.shape[axis]).reshape(-1,i).T.flatten(), 0)		#axis0 array indices
+		x1 = np.expand_dims(np.concatenate([np.arange(i)]*isclose_bool.shape[axis]).reshape(-1,i).T.flatten(), 0)		#axis0 array dofs
 		x2 = np.concatenate([np.asarray(diag_indices)]*i, 1)
 		diag_indices = tuple(np.concatenate((x1,x2),0))
 	isclose_bool[diag_indices] = False
@@ -588,7 +588,7 @@ def unique_close2(a, axis = 0, return_indices = False, return_counts = False):		
 	# c = c*np.tril(c)		#product of c and lower tri array of c removes duplicates in upepr triangle
 	# c[np.diag_indices(c.shape[0])] = 0		#removes True values from diagonal
 	# c = c.sum(0).astype(bool)				#indice of extra points
-	# c = ~c			#unique close indices
+	# c = ~c			#unique close dofs
 	# print(a[c])
 	#shorter:
 	# i = np.isclose(np.expand_dims(a,1), a).all(2)
@@ -1036,7 +1036,7 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = False):
 	form_bool_sum = form_bool.sum(0).sum(-1)
 	form_segment_all_vh_in_fh_idx = np.where(form_bool_sum == 3)[0]
 	form_segment_1_or_2_vh_inside_fh_idx = np.where((form_bool_sum == 1) | (form_bool_sum == 2))[0]
-	form_ind = np.where(form_bool)				#[0] are indices of block_inside_vh_idx, [1] are fh
+	form_ind = np.where(form_bool)				#[0] are dofs of block_inside_vh_idx, [1] are fh
 	
 	form_segment_data_dict = dict(zip(tuple(range(form_segment_fvi.shape[0])), [np.empty((0,3))]*form_segment_fvi.shape[0]))		#dict for every fh with empty array(0,3)
 	for pair in list(np.asarray(form_ind)[0:2].T):
@@ -1048,7 +1048,7 @@ def cut_mesh2(block_mesh, form_mesh, block_dims, block_position, rec = False):
 	# form_segment_fh_idx_to_cut = np.where(~form_bool2)[0]
 	
 	block_bool = np.equal(np.expand_dims(block_fvi,0), block_inside_vh_idx.reshape(-1,1,1))			#bool of block seg fvi ; True means that a vi is inside
-	block_ind = np.where(block_bool)			#[0] are indices of block_inside_vh_idx, [1] are fh
+	block_ind = np.where(block_bool)			#[0] are dofs of block_inside_vh_idx, [1] are fh
 	
 	block_data_dict = dict(zip(tuple(range(block_fvi.shape[0])), [np.empty((0,3))]*block_fvi.shape[0]))		#dict for every fh with empty array(0,3)
 	for pair in list(np.asarray(block_ind)[0:2].T):
@@ -1357,7 +1357,7 @@ def extract_mesh2(fh_idx_to_extract, mesh, mesh_vh_idx_to_sync = None):		#mesh v
 	if mesh_vh_idx_to_sync is None:
 		return om.TriMesh(new_points, new_fvi)
 	else:
-		synced_vh = np.intersect1d(extracted_vi, mesh_vh_idx_to_sync, return_indices = True)[1] #intersect1d returns 1, common elements, 2,indices of first occurace in arr1 3, first comm in arr2 ; new vh idx is equal to indices of occurance in first array
+		synced_vh = np.intersect1d(extracted_vi, mesh_vh_idx_to_sync, return_indices = True)[1] #intersect1d returns 1, common elements, 2,dofs of first occurace in arr1 3, first comm in arr2 ; new vh idx is equal to dofs of occurance in first array
 		return (om.TriMesh(new_points, new_fvi), synced_vh)
 	
 def replace(array, values_to_replace, values_to_replace_with):			#replaces values of array with values to replace arg2 and 1 are 1D array with same shape	
@@ -1426,18 +1426,18 @@ def hard_merge_meshes2(meshes, vh_idx_to_sync = None):			#vh_idx_to_sync_list is
 		bool = np.triu(bool)
 		ind = np.asarray(np.where(bool))
 		#remove duplicates incase 3+ vh idx on same point
-		data = np.unique(ind[1], return_index = True) #[0] unique values, [1] their indices in orig array, 
+		data = np.unique(ind[1], return_index = True) #[0] unique values, [1] their dofs in orig array,
 		ind = ind[:, data[1]]
 		#delete duplicate points, replace duplicate vh_idx in fvi
 		#duplicate vh_idx reduction:
 		fvi_ind = np.where(np.expand_dims(merged_mesh_fvi, 0) == ind[1].reshape(-1,1,1))
-		merged_mesh_fvi[fvi_ind[1:3]] = ind[0][fvi_ind[0]]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual indices of fvi to be replaced
+		merged_mesh_fvi[fvi_ind[1:3]] = ind[0][fvi_ind[0]]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual dofs of fvi to be replaced
 		#syncing fvi afrer deleting duplicate points:
 		vh_to_delete = np.unique(ind[1])
 		vh_to_keep = np.delete(np.arange(merged_mesh_points.shape[0]), vh_to_delete, 0)
 		merged_mesh_points = np.delete(merged_mesh_points, vh_to_delete, 0)
 		fvi_ind = np.where(np.expand_dims(merged_mesh_fvi, 0) == vh_to_keep.reshape(-1,1,1))
-		merged_mesh_fvi[fvi_ind[1:3]] = fvi_ind[0]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual indices of fvi to be replaced
+		merged_mesh_fvi[fvi_ind[1:3]] = fvi_ind[0]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual dofs of fvi to be replaced
 		
 		return om.TriMesh(merged_mesh_points, merged_mesh_fvi)
 		
@@ -1454,18 +1454,18 @@ def hard_merge_meshes2(meshes, vh_idx_to_sync = None):			#vh_idx_to_sync_list is
 		bool = np.triu(bool)
 		ind = np.asarray(np.where(bool))
 		#remove duplicates incase 3+ vh idx on same point
-		data = np.unique(ind[1], return_index = True) #[0] unique values, [1] their indices in orig array, 
+		data = np.unique(ind[1], return_index = True) #[0] unique values, [1] their dofs in orig array,
 		ind = ind[:, data[1]]
 		#delete duplicate points, replace duplicate vh_idx in fvi
 		#duplicate vh_idx reduction:
 		fvi_ind = np.where(np.expand_dims(merged_mesh_fvi, 0) == ind[1].reshape(-1,1,1))
-		merged_mesh_fvi[fvi_ind[1:3]] = ind[0][fvi_ind[0]]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual indices of fvi to be replaced
+		merged_mesh_fvi[fvi_ind[1:3]] = ind[0][fvi_ind[0]]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual dofs of fvi to be replaced
 		#syncing fvi afrer deleting duplicate points:
 		vh_to_delete = np.unique(ind[1])
 		vh_to_keep = np.delete(np.arange(merged_mesh_points.shape[0]), vh_to_delete, 0)
 		merged_mesh_points = np.delete(merged_mesh_points, vh_to_delete, 0)
 		fvi_ind = np.where(np.expand_dims(merged_mesh_fvi, 0) == vh_to_keep.reshape(-1,1,1))
-		merged_mesh_fvi[fvi_ind[1:3]] = fvi_ind[0]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual indices of fvi to be replaced
+		merged_mesh_fvi[fvi_ind[1:3]] = fvi_ind[0]		#slice fvi ind because [0] is indice of what vh_idx the fvi were compared to, 1,2 are actual dofs of fvi to be replaced
 		
 		#sync vh idx:
 		data = np.intersect1d(vh_idx_to_sync, ind[1], return_indices = True)
@@ -1609,7 +1609,7 @@ def subdivide_mesh(mesh_list, c = 0 ,n = 1): #face po face subdividamo n puta,c 
 			mesh_points =  mesh.points()
 			mesh_fvi = mesh.face_vertex_indices().tolist()
 			mesh_hei = mesh.face_halfedge_indices().tolist() #lista sa 3 vrijednosti unutra
-			face_hevi = mesh.halfedge_vertex_indices().tolist() #heh idx -> vertex indices	#lista [.........] velika sa slistama od 2 point = points[vindices]
+			face_hevi = mesh.halfedge_vertex_indices().tolist() #heh idx -> vertex dofs	#lista [.........] velika sa slistama od 2 point = points[vindices]
 			for i in range(len(mesh_fvi)): #i je idx od fh
 				face_points = np.empty((0,3))
 				midpoints = np.empty((0,3))

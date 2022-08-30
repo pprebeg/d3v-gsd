@@ -576,7 +576,13 @@ class HullForm(Geometry):
                     deckOutlinesHull[idk].append([aftEnd[idk], 0])
                 kmin = aftEnd[idk]
                 kmax = shipdata["loa_val"] / 2
-                klist = np.linspace(kmin, kmax, nump)
+                if frame_positions is not None:
+                    klist= []
+                    for x in frame_positions:
+                        if x >= kmin and x <= kmax:
+                            klist.append(x)
+                else:
+                    klist = np.linspace(kmin, kmax, nump)
                 for xpt in klist:
                     deckOutlinesHull[idk].append([xpt, (
                                 Math.sqrt(Math.pow(ogiveRadius[idk], 2) - Math.pow(xpt - shipdata["loa_val"] / 2, 2)) +
