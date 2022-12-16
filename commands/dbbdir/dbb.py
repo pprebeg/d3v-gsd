@@ -3,13 +3,19 @@ import os
 import numpy as np
 import copy
 import csv
-import dbbdir.dbbcut as mf
+from scipy.spatial.transform import Rotation as R
+
 from hullformdir.hullform import HullForm
 #d3v imports
 from extendedgeometry import ExtendedGeometry
 from typing import List, Dict,Tuple
 import itertools
 from collections import deque
+use_gmsh_cut = True
+if use_gmsh_cut:
+	import dbbdir.dbbcutgmsh as mf
+else:
+	import dbbdir.dbbcut as mf
 
 
 class DBBBaseAll(ExtendedGeometry):
@@ -38,6 +44,10 @@ class DBBBaseAll(ExtendedGeometry):
 	@property
 	def position(self):
 		return self._position
+
+	@position.setter
+	def position(self, value):
+	    self._position = value
 
 	@property
 	def size(self):
@@ -668,15 +678,21 @@ class DBBBase(DBBBaseAll):
 
 	def _cutMesh(self, cutting_mesh:om.TriMesh):  # za sada ako je position po y + a block dims po y neg nece radit
 		if cutting_mesh.n_faces() > 0:
-			cut_mesh = mf.cut_mesh2(self.mesh, cutting_mesh, self.size, self.position)
+			if (self.size == 0.0).any():
+				raise Exception("Block id: " + str(self.id) + " has one dimension as 0.")
+			if use_gmsh_cut:
+				cut_mesh = mf.cut_mesh(cutting_mesh, self.size, self.position)
+			else:
+				cut_mesh = mf.cut_mesh2(self.mesh, cutting_mesh, self.size, self.position)
 			self.mesh = cut_mesh
-		pass
 
 	def calc_volume(self):
 		return mf.calc_mesh_volume(self.mesh)
 
 	def is_closed(self):
-		 return mf.is_mesh_closed(self.mesh)
+		bool = mf.is_mesh_closed(self.mesh)
+		print("Mesh id " + str(self.id) + " is closed: " + "\n      " + str(bool) + "\n")
+		return bool
 
 
 
@@ -714,6 +730,56 @@ class DBBCompartment(DBBBase):
 		msg += '\nsegment = ' + str(self.segment.id)
 		return msg
 
+class DBBCompartmentImportedMesh(DBBCompartment):
+	def __init__(self, id, size: np.ndarray, position: np.ndarray,block_type:str,deck_hull:DBBDeckHull,
+				 zone:str,segment:DBBBase,mesh_file_path,mesh_rot):
+		self._mesh_file_path = mesh_file_path
+		self._mesh_rot = mesh_rot
+		super().__init__(id,size, position,block_type,deck_hull,zone,segment)
+
+
+	def get_info(self) -> str:
+		msg= super(DBBCompartment,self).get_info()
+		msg="Predefined Compartment"+msg
+		msg += '\nzone = ' + str(self.zone)
+		msg += '\nsegment = ' + str(self.segment.id)
+		return msg
+
+	def regenerateMesh(self):
+		self._genMesh()
+	def _genMesh(self):
+
+		mesh = om.read_trimesh(self._mesh_file_path)
+		fvs = mesh.fv_indices()
+		p = mesh.points()
+		#r = R.from_euler('x', 90, degrees=True)
+		listrot = self._mesh_rot.split(';')
+		# rotate object to desired orientation
+		if len(listrot) == 4:
+			rot_order=listrot[0]
+			rot_vals = float(listrot[1]),float(listrot[2]),float(listrot[3])
+			r = R.from_euler(rot_order, rot_vals, degrees=True)
+			rmat = r.as_matrix()
+			p=np.dot(p,rmat.T)
+		# determine coordinaes mins and maxes for shifting and scaling
+		mins = p.min(axis=0)
+		maxs = p.max(axis=0)
+		d = maxs - mins
+		#d = p.ptp(axis=0)
+		o = (mins + maxs) * .5
+		# move mesh object origin to the center of the object
+		p=p-o
+		scale = self.size/d
+		scale = scale[0:2].min()
+		q = p * scale
+		mins = q.min(axis=0)
+		#shift scaled mesh z origin to the bottom of the object
+		q=q-np.array([0.0,0.0, mins[2]])
+		#position the origin in the center of compartment with respect to x,y (z0 is on the deck level)
+		co=self.position + np.array([self.size[0]/2,self.size[1]/2, 0.0])
+		# move mesh to the final position
+		q = q + co
+		self.mesh =  om.TriMesh(q,fvs)
 
 class DBBSegment(DBBBase):
 	def __init__(self, id, size: np.ndarray, position: np.ndarray,block_type:str,deck_hull:DBBDeckHull,
@@ -1012,12 +1078,17 @@ class DBBProblem_new():
 						id_seg = 'NO'+id
 					segment = deck.get_segment(id_seg)
 					if segment is not None:
-						position = np.array([float(row["Ax"]), float(row["Ay"]), deck.position[2]])
-						size = np.array([float(row["b"]), float(row["a"]), deck.size[2]])
-
 						type = str(row["Type"])
 						zone = str(row["Zone"])
-						comp = DBBCompartment(id,size,position,type,deck.hull,zone,segment)
+						position = np.array([float(row["Ax"]), float(row["Ay"]), deck.position[2]])
+						size = np.array([float(row["b"]), float(row["a"]), deck.size[2]])
+						if type == "SMC":
+							smc_path = self._abspath+str(row["add_info1"])
+							smc_rot_data = str(row["add_info2"])
+							comp = DBBCompartmentImportedMesh(id, size, position, type, deck.hull, zone, segment,
+															  smc_path,smc_rot_data)
+						else:
+							comp = DBBCompartment(id,size,position,type,deck.hull,zone,segment)
 						comp.set_show(do_show and segment._show)
 						segment.add_compartment(comp)
 					else:
@@ -1131,16 +1202,16 @@ class DBBProblem_new():
 			abspath2 = '/'.join(self.filename.split('/')[0:-1])
 			if len(abspath2) > len(abspath1):
 				sf_char = '/'
-				abspath = abspath2 + '/'
+				self._abspath = abspath2 + '/'
 				hull_form_input = hull_form_input.replace('\\','/')
 				dbb_designs = dbb_designs.replace('\\','/')
 			else:
 				sf_char='\\'
-				abspath = abspath1 + '\\'
+				self._abspath = abspath1 + '\\'
 				hull_form_input = hull_form_input.replace('/','\\')
 				dbb_designs = dbb_designs.replace( '/','\\')
-			hull_form_input = abspath+hull_form_input
-			dbb_designs = abspath + dbb_designs
+			hull_form_input = self._abspath+hull_form_input
+			dbb_designs = self._abspath + dbb_designs
 			wb_file,rsb_file, sb_file = self.prepare_exported_data(dbb_designs, sf_char)
 			self.hull = DBBHullFormAll(hull_form_input)
 			return wb_file,rsb_file,sb_file
