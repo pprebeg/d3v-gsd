@@ -1,0 +1,7 @@
+pyHoltrop: original files copied from https://gitlab.com/berhoel/python/pyholtrop
+=========
+
+This still water resistance prediction method in this program has been described by:
+
+ * J. Holtrop and G.G.J. Mennen, "An Approximate Power Prediction Method", International Shipbuilding Progress, Vol. 89, 1982.
+ * J. Holtrop, "A Statistical Reanalysis of Resistance and Propulsion Data", International Shipbuilding Progress, Vol. 31, 1984.
