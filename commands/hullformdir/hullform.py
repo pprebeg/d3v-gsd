@@ -17,6 +17,12 @@ class HullForm(GeometryExtension):
         pass
 
     def get_length_from_mesh(self):
+        if self.mesh is not None:
+            points = self.mesh.points()
+            xmin = points.min(axis=0)[0]
+            xmax = points.max(axis=0)[0]
+            return xmax - xmin
+        return 0
 
     def translate(self,translate_vector):
         translate_vector=np.array(translate_vector)
