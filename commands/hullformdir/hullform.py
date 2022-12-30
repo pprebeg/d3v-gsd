@@ -16,13 +16,34 @@ class HullForm(GeometryExtension):
     def regenerateHullHorm(self):
         pass
 
-    def get_length_from_mesh(self):
+    def get_x_main_frame_from_mesh(self):
         if self.mesh is not None:
-            points = self.mesh.points()
-            xmin = points.min(axis=0)[0]
-            xmax = points.max(axis=0)[0]
-            return xmax - xmin
+            bb=self.bbox
+            xmin = bb.minCoord[0]
+            xmax = bb.maxCoord[0]
+            return (xmax + xmin)/2.0
         return 0
+
+    def miror_mesh(self):
+        if self.mesh is not None:
+            bb=self.bbox
+            xmin = bb.minCoord[0]
+            xmax = bb.maxCoord[0]
+            fvi = self.mesh.fv_indices()
+            points = self.mesh.points()
+            points[:,0] = xmax-points[:,0]+xmin
+            self.mesh = om.TriMesh(points, fvi)
+
+    def rise_mesh_ends(self,rise_end):
+        if self.mesh is not None:
+            bb=self.bbox
+            xmin = bb.minCoord[0]
+            xmax = bb.maxCoord[0]
+            fvi = self.mesh.fv_indices()
+            points = self.mesh.points()
+            xmid = (xmin + xmax)/2.0
+            points[:,2] = points[:,2]+ np.power(np.abs(xmid - points[:,0])/(xmax-xmin)*1.5,2.0)*rise_end
+            self.mesh = om.TriMesh(points, fvi)
 
     def translate(self,translate_vector):
         translate_vector=np.array(translate_vector)
@@ -54,6 +75,7 @@ class HullFormFromMesh(HullForm):
             points = self._original_mesh.points()
             points+=self._translation
             self.mesh =om.TriMesh(points, fvi)
+            self.miror_mesh() # kyrinia
 
     def exportGeometry(self, fileName):
         HullFormFromMesh.export_hull_form(fileName,self)

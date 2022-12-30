@@ -1,3 +1,5 @@
+import numpy as np
+
 from hullformdir.hullform import *
 import csv
 import math as Math
@@ -16,6 +18,19 @@ def writecsv_dictionary(filepath: str, dict: Dict):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerow(dict)
+def get_perpendicular_offset_point(p0:np.ndarray,p1:np.ndarray,plane_normal:np.ndarray, offset):
+    v1=p1-p0
+    uvec= np.cross(v1,plane_normal)
+    uvec = uvec/np.linalg.norm(uvec)
+    perp_point= p0+uvec*offset
+    return perp_point
+
+def get_point_intersection_two_lines(a0:np.ndarray,a1:np.ndarray,b0:np.ndarray,b1:np.ndarray):
+    res = np.linalg.lstsq(np.array([a1 - a0, b0 - b1]).T, b0 - a0)
+    t=res[0][0]
+    p = (1 - t) * a0 + t * a1
+    #p = (1 - s) * b0 + s * b1
+    return  p
 
 class HullGenFormMeshControl:
     def __init__(self):
@@ -84,10 +99,20 @@ class HullGeneratorForm(HullForm):
         elif file_extension == ".hgf":
             self.shipdata, self.pdecks, self.pbulkheads, self.dict_decks = self.read_file()
         self.mesh,self.wlinesPos,self.wlinesNeg,self.wlKeel = self._generateHullForm()
+        use_rise = self.shipdata['is_ancent']
+        if use_rise:
+            depth = self.shipdata["depth_val"]
+            rise_end = depth * 1.5
+            self.rise_mesh_ends(rise_end)
 
 
     def regenerateHullHorm(self):
         self.mesh, self.wlinesPos, self.wlinesNeg, self.wlKeel = self._generateHullForm()
+        use_rise = self.shipdata['is_ancent']
+        if use_rise:
+            depth = self.shipdata["depth_val"]
+            rise_end = depth * 1.5
+            self.rise_mesh_ends(rise_end)
 
     def _generateHullForm(self):
         transomTip = self.shipdata["depth_val"] * self.shipdata["td_val"]
@@ -125,6 +150,9 @@ class HullGeneratorForm(HullForm):
                     mesh.add_face(whs[iL - 1][ipL_1 - 1], whs[iL][ip],    whs[iL][ip-1])
 
     def _generateMesh(self, lines: list):
+        use_wooden_keel = self.shipdata['is_ancent']
+        wooden_keel_width = 0.05
+        wooden_keel_height = 0.2
         mesh = om.TriMesh()
         om.PolyMesh()
         wlinesPos = lines[0]  # positive y waterlines
@@ -135,23 +163,206 @@ class HullGeneratorForm(HullForm):
 
         whsPos = []
         whsNeg = []
-        whsi = []
-        whsPos.append(whsi)
-        whsNeg.append(whsi)
-        for p in wlKeel:
-            whsi.append(mesh.add_vertex(p))
 
 
-        for wl in wlinesPos:
+        if use_wooden_keel:
+            loa = self.shipdata["loa_val"]
+            # determine wooden keel stern vector
+            a0=wlinesPos[-1][0].copy()
+            keel_stern_vector=a0-wlinesPos[-2][0]
+            keel_stern_vector = keel_stern_vector/np.linalg.norm(keel_stern_vector)
+            a0[0] = a0[0]- wooden_keel_height
+            a1= a0+keel_stern_vector*self.shipdata["depth_val"]*2
+            # determine wooden keel bow vectors
+            wl_bow_offset_points=[]
+            wl_last= wlKeel
+            plane_normal = np.array([0.0,1.0,0.0])
+            for i in range(len(wlinesPos)):
+                wl=wlinesPos[i]
+                bow_a0 = wl[-1].copy()
+                bow_a1 = wl_last[-1].copy()
+                bow_p = get_perpendicular_offset_point(bow_a0,bow_a1,plane_normal,wooden_keel_height)
+                wl_bow_offset_points.append(bow_p)
+                wl_last = wl
+
+            num_pts=len(wlKeel)
+            wlKeel_np= np.array(wlKeel)
+            wlKeel_cl_offset =wlKeel_np.copy()
+            wlKeel_cl_offset[:, 2] = wlKeel_cl_offset[:, 2] - wooden_keel_height
+            # Keel -  Positive waterlines
+            wlKeel_pos = wlKeel_np.copy()
+            wlKeel_pos[:,1] = wooden_keel_width
+            wlKeel_pos_offset = wlKeel_pos.copy()
+            wlKeel_pos_offset[:, 2] = wlKeel_pos_offset[:, 2]-wooden_keel_height
+            #WL 1 - simmetry line, offset down
             whsi = []
             whsPos.append(whsi)
-            for p in wl:
-                whsi.append(mesh.add_vertex(p))
-        for wl in wlinesNeg:
+            p=get_point_intersection_two_lines(a0,a1,wlKeel_cl_offset[0, :],wlKeel_cl_offset[0, :]+np.array([-wooden_keel_height*5,0.0,0.0]))
+            whsi.append(mesh.add_vertex(p))
+            for i in range(num_pts):
+                pi=wlKeel_cl_offset[i,:]
+                whsi.append(mesh.add_vertex(pi))
+            p_1 = get_point_intersection_two_lines(wl_bow_offset_points[0], wl_bow_offset_points[1],
+                                                   np.array([0.0, 0.0, p[2]]),
+                                                   np.array([loa, 0.0, p[2]]))
+            whsi.append(mesh.add_vertex(p_1))
+            # WL 2 - keel width, offset down
+            whsi = []
+            whsPos.append(whsi)
+            p1 =  p.copy()
+            p0 = p.copy()
+            p1[1] = wooden_keel_width
+            whsi.append(mesh.add_vertex(p0))
+            whsi.append(mesh.add_vertex(p1))
+            for i in range(num_pts):
+                pi = wlKeel_pos_offset[i, :]
+                whsi.append(mesh.add_vertex(pi))
+            p_1 = get_point_intersection_two_lines(wl_bow_offset_points[0], wl_bow_offset_points[1], np.array([0.0, 0.0, p0[2]]),
+                                                  np.array([loa, 0.0, p0[2]]))
+            p_2 = p_1.copy()
+            p_2[1] = wooden_keel_width
+            whsi.append(mesh.add_vertex(p_2))
+            whsi.append(mesh.add_vertex(p_1))
+            # WL 3 - keel width, on hull
+            whsi = []
+            whsPos.append(whsi)
+            p1 = wlKeel_pos[0, :].copy()
+            p1[0] = 0
+            p0 = get_point_intersection_two_lines(a0, a1, p1,
+                                                 p1 + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
+            p1 = p0.copy()
+            p1[1] = wooden_keel_width
+            whsi.append(mesh.add_vertex(p0))
+            whsi.append(mesh.add_vertex(p1))
+            wl_keel_pos = []
+            wl_keel_pos.append(p0)
+            wl_keel_pos.append(p)
+            for i in range(num_pts):
+                pi = wlKeel_pos[i, :]
+                whsi.append(mesh.add_vertex(pi))
+                wl_keel_pos.append(pi)
+            p_1 = wl_bow_offset_points[0]
+            p_2 = p_1.copy()
+            p_2[1] = wooden_keel_width
+            whsi.append(mesh.add_vertex(p_2))
+            whsi.append(mesh.add_vertex(p_1))
+            # Keel -  Negative waterlines
+            wlKeel_neg = wlKeel_np.copy()
+            wlKeel_neg[:, 1] = -wooden_keel_width
+            wlKeel_neg_offset = wlKeel_neg.copy()
+            wlKeel_neg_offset[:, 2] = wlKeel_neg_offset[:, 2] - wooden_keel_height
+            # WL 1 - simmetry line, offset down
             whsi = []
             whsNeg.append(whsi)
-            for p in wl:
+            p = get_point_intersection_two_lines(a0, a1, wlKeel_cl_offset[0, :],
+                                                 wlKeel_cl_offset[0, :] + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
+            whsi.append(mesh.add_vertex(p))
+            for i in range(num_pts):
+                pi = wlKeel_cl_offset[i, :]
+                whsi.append(mesh.add_vertex(pi))
+            p_1 = get_point_intersection_two_lines(wl_bow_offset_points[0], wl_bow_offset_points[1], np.array([0.0, 0.0, p[2]]),
+                                                  np.array([loa, 0.0, p[2]]))
+            whsi.append(mesh.add_vertex(p_1))
+            # WL 2 - keel width, offset down
+            whsi = []
+            whsNeg.append(whsi)
+            p1 = p.copy()
+            p0 = p.copy()
+            p1[1] = -wooden_keel_width
+            whsi.append(mesh.add_vertex(p0))
+            whsi.append(mesh.add_vertex(p1))
+            for i in range(num_pts):
+                pi = wlKeel_neg_offset[i, :]
+                whsi.append(mesh.add_vertex(pi))
+
+            p_2 = p_1.copy()
+            p_2[1] = -wooden_keel_width
+            whsi.append(mesh.add_vertex(p_2))
+            whsi.append(mesh.add_vertex(p_1))
+            # WL 3 - keel width, on hull
+            whsi = []
+            whsNeg.append(whsi)
+            p1 = wlKeel_neg[0, :].copy()
+            p1[0] = 0
+            p0 = get_point_intersection_two_lines(a0, a1, p1,
+                                                  p1 + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
+            p1=p0.copy()
+            p1[1] = -wooden_keel_width
+            whsi.append(mesh.add_vertex(p0))
+            whsi.append(mesh.add_vertex(p1))
+            wl_keel_neg = []
+            wl_keel_neg.append(p0)
+            wl_keel_neg.append(p1)
+            for i in range(num_pts):
+                pi = wlKeel_neg[i, :]
+                whsi.append(mesh.add_vertex(pi))
+                wl_keel_neg.append(pi)
+            p_1 = wl_bow_offset_points[0]
+            p_2 = p_1.copy()
+            p_2[1] = -wooden_keel_width
+            whsi.append(mesh.add_vertex(p_2))
+            whsi.append(mesh.add_vertex(p_1))
+            # Positive waterlines
+            for i in range(len(wlinesPos)):
+                wl=wlinesPos[i]
+                whsi = []
+                whsPos.append(whsi)
+                p0 = get_point_intersection_two_lines(a0, a1, wl[0],
+                                                      wl[0] + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
+                whsi.append(mesh.add_vertex(p0))
+                p1 = p0.copy()
+                p1[1] =  wooden_keel_width
+                whsi.append(mesh.add_vertex(p1))
+                for ip in range(len(wl)):
+                    p=wl[ip]
+                    if p[1]<wooden_keel_width:
+                        p[1] = wooden_keel_width
+                    whsi.append(mesh.add_vertex(p))
+                p_1=wl_bow_offset_points[i]
+                p_2 =p_1.copy()
+                p_2[1] = wooden_keel_width
+                whsi.append(mesh.add_vertex(p_2))
+                whsi.append(mesh.add_vertex(p_1))
+            # Negative waterlines
+
+            for i in range(len(wlinesNeg)):
+                wl=wlinesNeg[i]
+                whsi = []
+                whsNeg.append(whsi)
+                p0 = get_point_intersection_two_lines(a0, a1, wl[0],
+                                                      wl[0] + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
+                whsi.append(mesh.add_vertex(p0))
+                p1 = p0.copy()
+                p1[1] =  - wooden_keel_width
+                whsi.append(mesh.add_vertex(p1))
+                for ip in range(len(wl)):
+                    p = wl[ip]
+                    if p[1] > -wooden_keel_width:
+                        p[1] = -wooden_keel_width
+                    whsi.append(mesh.add_vertex(p))
+                p_1 = wl_bow_offset_points[i]
+                p_2 = p_1.copy()
+                p_2[1] = -wooden_keel_width
+                whsi.append(mesh.add_vertex(p_2))
+                whsi.append(mesh.add_vertex(p_1))
+        else:
+            whsi = []
+            whsPos.append(whsi)
+            whsNeg.append(whsi)
+            for p in wlKeel:
                 whsi.append(mesh.add_vertex(p))
+
+            for wl in wlinesPos:
+                whsi = []
+                whsPos.append(whsi)
+                for p in wl:
+                    whsi.append(mesh.add_vertex(p))
+
+            for wl in wlinesNeg:
+                whsi = []
+                whsNeg.append(whsi)
+                for p in wl:
+                    whsi.append(mesh.add_vertex(p))
 
         self._genFaces(mesh,whsPos,True)
         self._genFaces(mesh, whsNeg,False)
@@ -209,14 +420,18 @@ class HullGeneratorForm(HullForm):
                     TB = 0
 
                 transomBeam.append(TB)
-                fwdDeckMArray.append(fwdDeckM * (pdecks[i] / (shipdata[
-                    "depth_val"])) + 0.001)  # Changes constant m in JC equation to make deck outlines becomes slimmer with decreasing z position (see below)
-                if (pdecks[i] >= transomTip):
-                    AE = (depth - pdecks[i]) * Math.tan(slope)
-
+                fwdDeckMArray.append(fwdDeckM * (pdecks[i] / depth) + 0.001)  # Changes constant m in JC equation to make deck outlines becomes slimmer with decreasing z position (see below)
+                if use_forward_model_for_aft:
+                    AE= loa - ((Math.acosh(
+                        (pdecks[i] / depth) * (Math.cosh(bowRakeM * Math.pi) - 1) + 1) / (
+                                            bowRakeM * Math.pi)) * (loa - keelFwd) + keelFwd)
                 else:
-                    AE = (depth - transomTip) * Math.tan(slope) + (transomTip - pdecks[i]) * (
-                                (ACU - (depth - transomTip) * Math.tan(slope)) / transomTip)
+                    if (pdecks[i] >= transomTip):
+                        AE = (depth - pdecks[i]) * Math.tan(slope)
+
+                    else:
+                        AE = (depth - transomTip) * Math.tan(slope) + (transomTip - pdecks[i]) * (
+                                    (ACU - (depth - transomTip) * Math.tan(slope)) / transomTip)
 
                 aftEnd.append(AE)
                 pdecks2.append(pdecks[i])
@@ -240,12 +455,12 @@ class HullGeneratorForm(HullForm):
 
         deckOutlinesHull = []  # Array with hull deck outline x, y coordinates
         # Get y points for every x
-        for idk in range(len(midBeam)):  # For each deck in hull
+        for ideck in range(len(midBeam)):  # For each deck in hull
             deckOutlinesHull.append([])  # For each deck create array
-            if pdecks2[idk] != 0:  # If not keel
-                if transomBeam[idk] > 0:  # Add vertical hull line at transom
-                    deckOutlinesHull[idk].append([aftEnd[idk], 0])
-                kmin = aftEnd[idk]
+            if pdecks2[ideck] != 0:  # If not keel
+                if transomBeam[ideck] > 0 and not use_forward_model_for_aft:  # Add vertical hull line at transom
+                    deckOutlinesHull[ideck].append([aftEnd[ideck], 0])
+                kmin = aftEnd[ideck]
                 kmax = loa / 2
                 if frame_positions is not None:
                  klist=[]
@@ -259,23 +474,21 @@ class HullGeneratorForm(HullForm):
 
                 if use_forward_model_for_aft:
                     for xpt in klist:
-                        ypt = Math.sqrt(
-                            Math.pow(ogiveRadius[idk], 2) - 
-                            Math.pow(xpt - loa / 2, 2)) +\
-                              noseConeBaseRadius[idk] - ogiveRadius[idk] + \
-                              transomBeam[idk]
-                        deckOutlinesHull[idk].append([xpt, ypt])
+                        eqX = (xpt - loa / 2) / (keelFwd + bowRake[ideck] - (loa / 2))
+                        ypt = (1 - ((Math.cosh(eqX * fwdDeckMArray[ideck] * Math.pi) - 1) / (
+                                Math.cosh(fwdDeckMArray[ideck] * Math.pi) - 1))) * midBeam[ideck]
+                        deckOutlinesHull[ideck].append([xpt, ypt])
                 else:
                     for xpt in klist:
                         ypt = Math.sqrt(
-                            Math.pow(ogiveRadius[idk], 2) -
+                            Math.pow(ogiveRadius[ideck], 2) -
                             Math.pow(xpt - loa / 2, 2)) + \
-                              noseConeBaseRadius[idk] - ogiveRadius[idk] + \
-                              transomBeam[idk]
-                        deckOutlinesHull[idk].append([xpt, ypt])
+                              noseConeBaseRadius[ideck] - ogiveRadius[ideck] + \
+                              transomBeam[ideck]
+                        deckOutlinesHull[ideck].append([xpt, ypt])
 
                 kmin = loa / 2
-                kmax = keelFwd + bowRake[idk]
+                kmax = keelFwd + bowRake[ideck]
                 if frame_positions is not None:
                  klist=[]
                  #klist.append(kmin)
@@ -286,15 +499,15 @@ class HullGeneratorForm(HullForm):
                 else:
                     klist = np.linspace(kmin, kmax, nump)
                 for xpt in klist:
-                    eqX = (xpt - loa / 2) / (keelFwd + bowRake[idk] - (loa / 2))
-                    ypt = (1 - ((Math.cosh(eqX * fwdDeckMArray[idk] * Math.pi) - 1) / (
-                                Math.cosh(fwdDeckMArray[idk] * Math.pi) - 1)))* midBeam[idk]
-                    deckOutlinesHull[idk].append([xpt,  ypt])
+                    eqX = (xpt - loa / 2) / (keelFwd + bowRake[ideck] - (loa / 2))
+                    ypt = (1 - ((Math.cosh(eqX * fwdDeckMArray[ideck] * Math.pi) - 1) / (
+                                Math.cosh(fwdDeckMArray[ideck] * Math.pi) - 1)))* midBeam[ideck]
+                    deckOutlinesHull[ideck].append([xpt,  ypt])
 
 
             else:  # If keel draw top
-                kmin = aftEnd[idk]
-                kmax = (keelFwd + bowRake[idk])
+                kmin = aftEnd[ideck]
+                kmax = (keelFwd + bowRake[ideck])
                 if frame_positions is not None:
                  klist=[]
                  klist.append(kmin)
@@ -306,7 +519,7 @@ class HullGeneratorForm(HullForm):
                     klist = np.linspace(kmin, kmax, nump*2)
 
                 for xpt in klist:
-                    deckOutlinesHull[idk].append([xpt, 0])  # Straight line
+                    deckOutlinesHull[ideck].append([xpt, 0])  # Straight line
 
         deckOutlinesS = []  # Array with superstructure deck outline x, y coordinates
         tumblehome = []  # Superstructure tumblehome

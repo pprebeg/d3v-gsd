@@ -1,23 +1,46 @@
-from hullform import *
+from hullformdir.hullform import *
 
 import numpy as np
 import time
 
-
-
-class Hydrostatics:
-    def __init__(self, hull_form:HullForm):
+class Hydrostatics():
+    def __init__(self, hull_form:HullForm,sea_density = 1.025):
         self._hf = hull_form
+        self._xmf=self._hf.get_x_main_frame_from_mesh()
+        self._sea_density = sea_density
 
-    def getResults(self,h,seaDensity):
-        tsStart = time.perf_counter() #početak mjerenja vremena
-
+    def get_hydrostatic_results(self, h):
+        seaDensity = self._sea_density
         fvs = self._hf.mesh.fv_indices().tolist()
         points = self._hf.mesh.points().tolist()
         mesh2calcWl=self.get_tria_for_calculation(fvs,points,h)
         fvs2calcWl=mesh2calcWl[0]
         points2calcWl=mesh2calcWl[1]
-        xmf = self._hf.shipdata["loa_val"]/2
+        xmf = self._xmf
+        bcwl=self.getBasicDataUsingTrianglesProjectedToWaterline(h,xmf,fvs2calcWl,points2calcWl)
+        h = bcwl[0]
+        volume = bcwl[1]
+        area = bcwl[2]
+        Xwl = bcwl[3]
+        KBz = bcwl[4]
+        KBx = bcwl[5]
+        Ib = bcwl[6]
+        Il = bcwl[7]
+        Swet = bcwl[8]
+        Lwl, Bwl = self.getLwlBwl(h, fvs2calcWl, points2calcWl)
+        mfarea = self.getMainFrameArea(xmf, h, fvs2calcWl, points2calcWl)
+        hsdata = self.getHydrostaticData(seaDensity, h, volume, area, Ib, Il, KBz, Lwl, 2 * Bwl, mfarea)
+        results= bcwl+hsdata
+        return results
+    def get_results_for_hydrostatic_curves(self, h):
+        seaDensity = self._sea_density
+        tsStart = time.perf_counter() #početak mjerenja vremena
+        fvs = self._hf.mesh.fv_indices().tolist()
+        points = self._hf.mesh.points().tolist()
+        mesh2calcWl=self.get_tria_for_calculation(fvs,points,h)
+        fvs2calcWl=mesh2calcWl[0]
+        points2calcWl=mesh2calcWl[1]
+        xmf = self._xmf
         tMesh=time.perf_counter()
         t1=tMesh-tsStart
 
@@ -30,30 +53,87 @@ class Hydrostatics:
         KBx = bcwl[5]
         Ib = bcwl[6]
         Il = bcwl[7]
-        #Swet = bcwl[8]
-        #print("Swet:",Swet)
+        Swet = bcwl[8]
         tBcwl = time.perf_counter()
         t2=tBcwl-tMesh
         Lwl, Bwl = self.getLwlBwl(h, fvs2calcWl, points2calcWl)
         mfarea = self.getMainFrameArea(xmf, h, fvs2calcWl, points2calcWl)
         hsdata = self.getHydrostaticData(seaDensity, h, volume, area, Ib, Il, KBz, Lwl, 2 * Bwl, mfarea)
 
-        results= bcwl+hsdata
+        results= bcwl[0:7]+hsdata
+        """
         tHSdata = time.perf_counter()
         dtAll = tHSdata - tsStart
         t3=tHSdata-tBcwl
-        """print("num_triuk", len(fvs))
+        print("num_triuk", len(fvs))
         print("num_tria", len(fvs2calcWl))
         print("Hydrostatic results calc timeMesh:", t1)
         print("Hydrostatic results calc timeBCWL:", t2)
         print("Hydrostatic results calc timeHSdata:", t3)
 
-        print("Hydrostatic results calc time:", dtAll)"""
+        print("Hydrostatic results calc time:", dtAll)
         timeuk=t1,t2,t3,dtAll
         print("time:",timeuk)
-        print("Results:",results)
-        print()
+        print("Results:",results)"""
         return results
+    def get_tria_for_calculation(self, fvs, points, h):
+        new_points = points
+        new_tria = []
+
+        lpbwl = []
+        lpowl = []
+        p = []
+        for fh in fvs:  # facet handle
+            p.clear()
+            lpowl.clear()
+            lpbwl.clear()
+            i = 0
+            lip = []
+            for vh in fh:  # vertex handle
+                p.append(points[vh])
+                if p[i][2] > h:
+                    lpowl.append(i)
+                else:
+                    lpbwl.append(i)
+                i = i + 1
+
+            #
+
+            if len(lpowl) == 0:
+                new_tria.append(fh)
+
+            if len(lpowl) == 1:
+                lip = self.getIntersectionPoints(p[lpowl[0]], p[lpbwl[0]], p[lpbwl[1]], h, 2)
+                n = len(new_points)
+                new_points.append(lip[0])
+                new_points.append(lip[1])
+                if lpowl[0]==1:
+                    fh_new = np.array([n, n + 1, fh[lpbwl[1]]])
+                    new_tria.append(fh_new)
+                    fh_new = np.array([n, fh[lpbwl[1]],fh[lpbwl[0]]])
+                    new_tria.append(fh_new)
+
+
+                else:
+                    fh_new = np.array([n, fh[lpbwl[1]], n + 1])
+                    new_tria.append(fh_new)
+                    fh_new = np.array([n, fh[lpbwl[0]], fh[lpbwl[1]]])
+                    new_tria.append(fh_new)
+
+            if len(lpowl) == 2:
+                lip = self.getIntersectionPoints(p[lpbwl[0]], p[lpowl[0]], p[lpowl[1]], h, 2)
+                n = len(new_points)
+                new_points.append(lip[0])
+                new_points.append(lip[1])
+                if lpbwl[0] == 1:
+                    fh_new = np.array([fh[lpbwl[0]], n+1, n])
+                    new_tria.append(fh_new)
+
+                else:
+                    fh_new = np.array([fh[lpbwl[0]], n, n + 1])
+                    new_tria.append(fh_new)
+
+        return new_tria, new_points
 
     def getMainFrameArea(self,x,h,fvs,points):
         mfpoints = self.getSortedPointsOnAxisAlignedPlane(x, fvs, points, 0)
@@ -181,7 +261,7 @@ class Hydrostatics:
         KBz = float(KBz.sum()/Vol)
         KBx=float(KBx.sum()/Vol)
 
-        return h, 2 * Vol, 2 * Awl, Xwl, KBz, KBx, 2 * Ib, 2 * Il #,Swet
+        return h, Vol, Awl, Xwl, KBz, KBx,  Ib, Il ,Swet
 
     def getIntersectionPoints(self, p1,p2,p3,h, os):
         ip1 = self.getIntersectionPoint(p1,p2,h, os)
@@ -213,7 +293,6 @@ class Hydrostatics:
         p1p3 = np.subtract(p3, p1)
         u = np.cross(p1p2, p1p3)
         cg = (p1 + p2 + p3) / 3
-
         return u/2,cg
 
 
