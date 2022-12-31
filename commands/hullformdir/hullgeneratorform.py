@@ -99,21 +99,20 @@ class HullGeneratorForm(HullForm):
         elif file_extension == ".hgf":
             self.shipdata, self.pdecks, self.pbulkheads, self.dict_decks = self.read_file()
         self.mesh,self.wlinesPos,self.wlinesNeg,self.wlKeel = self._generateHullForm()
-        use_rise = self.shipdata['is_ancent']
-        if use_rise:
-            depth = self.shipdata["depth_val"]
-            rise_end = depth * 1.5
-            self.rise_mesh_ends(rise_end)
+        self.rise_stern()
 
 
     def regenerateHullHorm(self):
         self.mesh, self.wlinesPos, self.wlinesNeg, self.wlKeel = self._generateHullForm()
-        use_rise = self.shipdata['is_ancent']
+        self.rise_stern()
+
+    def rise_stern(self):
+        use_rise = np.abs(1.0 - np.abs(self.shipdata['anc_rise_bow']*self.shipdata['anc_rise_stern'])) < 0.001
         if use_rise:
             depth = self.shipdata["depth_val"]
-            rise_end = depth * 1.5
-            self.rise_mesh_ends(rise_end)
-
+            rise_bow = depth * self.shipdata['anc_rise_bow']
+            rise_stern = depth * self.shipdata['anc_rise_stern']
+            self.rise_mesh_ends(rise_bow,rise_stern)
     def _generateHullForm(self):
         transomTip = self.shipdata["depth_val"] * self.shipdata["td_val"]
         obligatoryWL= []
@@ -150,9 +149,9 @@ class HullGeneratorForm(HullForm):
                     mesh.add_face(whs[iL - 1][ipL_1 - 1], whs[iL][ip],    whs[iL][ip-1])
 
     def _generateMesh(self, lines: list):
-        use_wooden_keel = self.shipdata['is_ancent']
-        wooden_keel_width = 0.05
-        wooden_keel_height = 0.2
+        wooden_keel_width = self.shipdata['anc_keel_width']
+        wooden_keel_height = self.shipdata['anc_keel_height']
+        use_wooden_keel = (wooden_keel_width*wooden_keel_height > 0.0)
         mesh = om.TriMesh()
         om.PolyMesh()
         wlinesPos = lines[0]  # positive y waterlines
@@ -163,8 +162,6 @@ class HullGeneratorForm(HullForm):
 
         whsPos = []
         whsNeg = []
-
-
         if use_wooden_keel:
             loa = self.shipdata["loa_val"]
             # determine wooden keel stern vector
@@ -373,7 +370,7 @@ class HullGeneratorForm(HullForm):
         # gs is the grid size of a cell, in pixels
         # Reminder to make gridsize scaled to the screen width
 
-        use_forward_model_for_aft= shipdata['is_ancent']
+        use_forward_model_for_aft= shipdata['use_fwd_for_aft']
         loa = shipdata["loa_val"]
         boa = shipdata["boa_val"]
         depth = shipdata["depth_val"]
@@ -381,7 +378,7 @@ class HullGeneratorForm(HullForm):
         #
         midshipsM = shipdata["ms_val"]  # Constant m in JC equation
         bowRakeM = shipdata["bow_val"]  # Constant m in JC equation
-        transomM = shipdata["tr_val"]  # Constant m in JC equation
+        transomM = shipdata["tr_stern_val"]  # Constant m in JC equation
         fwdDeckM = shipdata["deck_val"]  # Constant m in JC equation
 
         transomBeamMax = (boa * shipdata["tb_val"]) / 2  # Transom half beam
@@ -403,7 +400,12 @@ class HullGeneratorForm(HullForm):
         ogiveRadius = []  # See excel tool
         pdecks2 = []  # Array with deck positions of hull decks
         pdecks3 = []  # Array with deck positions of superstructure decks
-
+        if use_forward_model_for_aft:
+            stern_rakeM = shipdata["tr_stern_val"]
+            keel_stern = loa * shipdata["acu_val"]
+            sternRake = []  # Array with stern rake per deck
+            stern_deck_fullness = shipdata["tb_val"]
+            sternDeckMArray = []
         for i in range(len(pdecks)):  # Assign values to variables above
             if pdecks[i] <= depth:  # For each deck that is in the hull
                 midBeam.append((Math.acosh(
@@ -412,6 +414,11 @@ class HullGeneratorForm(HullForm):
                 bowRake.append((Math.acosh(
                     (pdecks[i] / depth) * (Math.cosh(bowRakeM * Math.pi) - 1) + 1) / (
                                             bowRakeM * Math.pi)) * (loa - keelFwd))
+                if use_forward_model_for_aft:
+                    sternRake.append((Math.acosh(
+                        (pdecks[i] / depth) * (Math.cosh(stern_rakeM * Math.pi) - 1) + 1) / (
+                                            stern_rakeM * Math.pi)) * (keel_stern))
+
                 if pdecks[i] > transomTip:
                     TB = ((Math.acosh(((pdecks[i] - transomTip) / (depth - transomTip)) * (
                                 Math.cosh(transomM * Math.pi) - 1) + 1) / (transomM * Math.pi)) * (transomBeamMax))
@@ -422,9 +429,15 @@ class HullGeneratorForm(HullForm):
                 transomBeam.append(TB)
                 fwdDeckMArray.append(fwdDeckM * (pdecks[i] / depth) + 0.001)  # Changes constant m in JC equation to make deck outlines becomes slimmer with decreasing z position (see below)
                 if use_forward_model_for_aft:
-                    AE= loa - ((Math.acosh(
+                    sternDeckMArray.append(stern_deck_fullness * (pdecks[i] / depth) + 0.001)
+                    AE= keel_stern - ((Math.acosh(
+                        (pdecks[i] / depth) * (Math.cosh(stern_rakeM * Math.pi) - 1) + 1) / (
+                                            stern_rakeM * Math.pi)) * (keel_stern))
+                    AE1 = loa - ((Math.acosh(
                         (pdecks[i] / depth) * (Math.cosh(bowRakeM * Math.pi) - 1) + 1) / (
-                                            bowRakeM * Math.pi)) * (loa - keelFwd) + keelFwd)
+                                         bowRakeM * Math.pi)) * (loa - keelFwd) + keelFwd)
+                    diffAE=AE-AE1
+                    tmpaaa=10
                 else:
                     if (pdecks[i] >= transomTip):
                         AE = (depth - pdecks[i]) * Math.tan(slope)
@@ -463,20 +476,20 @@ class HullGeneratorForm(HullForm):
                 kmin = aftEnd[ideck]
                 kmax = loa / 2
                 if frame_positions is not None:
-                 klist=[]
-                 klist.append(kmin)
-                 for pos in frame_positions:
-                     if pos>kmin and pos<=kmax:
-                         klist.append(pos)
-                 #klist.append(kmax)
+                    klist=[]
+                    klist.append(kmin)
+                    for pos in frame_positions:
+                        if pos>kmin and pos<=kmax:
+                            klist.append(pos)
+                    #klist.append(kmax)
                 else:
                     klist = np.linspace(kmin, kmax, nump)
 
                 if use_forward_model_for_aft:
                     for xpt in klist:
-                        eqX = (xpt - loa / 2) / (keelFwd + bowRake[ideck] - (loa / 2))
-                        ypt = (1 - ((Math.cosh(eqX * fwdDeckMArray[ideck] * Math.pi) - 1) / (
-                                Math.cosh(fwdDeckMArray[ideck] * Math.pi) - 1))) * midBeam[ideck]
+                        eqX = (xpt - loa / 2) / ((loa / 2)-keel_stern+sternRake[ideck])
+                        ypt = (1 - ((Math.cosh(eqX * sternDeckMArray[ideck] * Math.pi) - 1) / (
+                                Math.cosh(sternDeckMArray[ideck] * Math.pi) - 1))) * midBeam[ideck]
                         deckOutlinesHull[ideck].append([xpt, ypt])
                 else:
                     for xpt in klist:
@@ -490,12 +503,12 @@ class HullGeneratorForm(HullForm):
                 kmin = loa / 2
                 kmax = keelFwd + bowRake[ideck]
                 if frame_positions is not None:
-                 klist=[]
-                 #klist.append(kmin)
-                 for pos in frame_positions:
-                    if pos>kmin and pos<=kmax:
-                        klist.append(pos)
-                 klist.append(kmax)
+                    klist=[]
+                    #klist.append(kmin)
+                    for pos in frame_positions:
+                        if pos>kmin and pos<=kmax:
+                            klist.append(pos)
+                    klist.append(kmax)
                 else:
                     klist = np.linspace(kmin, kmax, nump)
                 for xpt in klist:
@@ -599,7 +612,7 @@ class HullGeneratorForm(HullForm):
             splitdata = str(shipset['HullData']).split(" ")
             shipdata["ms_val"] = float(splitdata[0])
             shipdata["bow_val"] = float(splitdata[1])
-            shipdata["tr_val"] = float(splitdata[2])
+            shipdata["tr_stern_val"] = float(splitdata[2])
             shipdata["deck_val"] = float(splitdata[3])
             shipdata["tb_val"] = float(splitdata[4])
             shipdata["td_val"] = float(splitdata[5])
@@ -625,7 +638,11 @@ class HullGeneratorForm(HullForm):
             shipdata['BHPos'] = shipset['BHPos']
             shipdata['Decks'] = shipset['Decks']
             shipdata['Bulkheads'] = shipset['Bulkheads']
-            shipdata['is_ancent']=False
+            shipdata['use_fwd_for_aft']=False
+            shipdata['anc_keel_width'] = 0.0
+            shipdata['anc_keel_height'] = 0.0
+            shipdata['anc_rise_bow'] = 1.0
+            shipdata['anc_rise_stern'] = 1.0
             if False:
                 shipdata["app1"] = float(splitdata[21])
                 shipdata["area_app1"] = float(splitdata[22])
@@ -682,11 +699,11 @@ class HullGeneratorForm(HullForm):
             for row in f:  # there is only one row after header row!!!!!
                 shipset = row
 
-            list_non_floats = {"DeckPos","BHPos","Decks","Bulkheads","shipname",'is_ancent'}
+            list_non_floats = {"DeckPos","BHPos","Decks","Bulkheads","shipname",'use_fwd_for_aft'}
             for key,value in shipset.items():
                 if key in list_non_floats:
                     shipdata[key] = shipset[key]
-                elif key =='is_ancent':
+                elif key =='use_fwd_for_aft':
                     shipdata[key] = bool(shipset[key])
                 else:
                     shipdata[key] = float(shipset[key])

@@ -34,7 +34,7 @@ class HullForm(GeometryExtension):
             points[:,0] = xmax-points[:,0]+xmin
             self.mesh = om.TriMesh(points, fvi)
 
-    def rise_mesh_ends(self,rise_end):
+    def rise_mesh_ends(self,rise_bow,rise_stern):
         if self.mesh is not None:
             bb=self.bbox
             xmin = bb.minCoord[0]
@@ -42,7 +42,13 @@ class HullForm(GeometryExtension):
             fvi = self.mesh.fv_indices()
             points = self.mesh.points()
             xmid = (xmin + xmax)/2.0
-            points[:,2] = points[:,2]+ np.power(np.abs(xmid - points[:,0])/(xmax-xmin)*1.5,2.0)*rise_end
+            points[:,2] = np.where(points[:,0 ]> xmid,
+                                   points[:,2]+ np.power(np.abs(xmid - points[:,0])/(xmax-xmin)*1.5,2.0)*rise_bow,
+                                   points[:,2])
+            points[:, 2] = np.where(points[:, 0] < xmid,
+                                    points[:, 2] + np.power(np.abs(xmid - points[:, 0]) / (xmax - xmin) * 1.5,
+                                                            2.0) * rise_stern,
+                                    points[:, 2])
             self.mesh = om.TriMesh(points, fvi)
 
     def translate(self,translate_vector):
