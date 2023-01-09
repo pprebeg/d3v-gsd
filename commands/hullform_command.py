@@ -11,6 +11,7 @@ from PySide6.QtCore import SIGNAL,SLOT
 from typing import Dict,List
 from uuid import uuid4
 
+import hullformdir.hullgeneratorform
 
 try:
     # d3v imports
@@ -23,6 +24,7 @@ try:
     from hullformdir.hullform import *
     from hullformdir.hullgeneratorform import HullGeneratorForm
     from hydrostatics_gui import HydrostaticsGUI
+    from ship_stability_gui import ShipStabilityGUI
 except BaseException as error:
     print('An exception occurred: {}'.format(error))
 except:
@@ -40,6 +42,7 @@ class HullFormCommand(Command):
         self.selected_hull_form=None
         self.active_hull_form = None
         self.referent_hull_form=None
+        self._last_active_guid = None
 
         mb = self.mainwin.menuBar()
         self.menuMain = QMenu("Hull Form")
@@ -85,10 +88,16 @@ class HullFormCommand(Command):
         self._hstat_gui = HydrostaticsGUI(self)
         self._hstat_gui.menuMain.setEnabled(False)
 
+        self._ship_stab_gui = ShipStabilityGUI(self)
+        self._ship_stab_gui.menuMain.setEnabled(False)
+
     @Slot()
     def onImportHullForm(self):
+        #fname = QFileDialog.getOpenFileName(self.mainwin,
+        #                                    'Select hull form file for import','../../../../examples/kyrenia',
+        #                                    "hull form files (*.hgf *.huf *.obf *.obj *.stl)")
         fname = QFileDialog.getOpenFileName(self.mainwin,
-                                            'Select hull form file for import','../../../../examples/kyrenia',
+                                            '',
                                             "hull form files (*.hgf *.huf *.obf *.obj *.stl)")
         fname = fname[0]
         if fname != "":
@@ -104,9 +113,13 @@ class HullFormCommand(Command):
         elif isinstance(self.active_hull_form, HullGeneratorForm):
             available_export = "available hull form types (*.obj *.stl)"
 
+        #fname = QFileDialog.getSaveFileName(self.mainwin,
+        #                                    'Export {0} form as'.format(self.active_hull_form.name),
+        #                                    '../../../../examples/kyrenia', available_export)
         fname = QFileDialog.getSaveFileName(self.mainwin,
                                             'Export {0} form as'.format(self.active_hull_form.name),
-                                            '../../../../examples/kyrenia', available_export)
+                                            '', available_export)
+        
         fileName = fname[0]
         self.active_hull_form.exportGeometry(fileName)
 
@@ -126,20 +139,23 @@ class HullFormCommand(Command):
         self.on_referent_hull_form_changed()
 
     def onSetActiveHullForm(self):
-        if self.active_hull_form is self.selected_hull_form:
+        if self.active_hull_form is self.selected_hull_form or self.selected_hull_form is None:
             return
         self.active_hull_form = self.selected_hull_form
+        self._last_active_guid = self.active_hull_form.guid
         self.on_active_hull_form_changed()
 
     def on_active_hull_form_changed(self):
         if self.active_hull_form is not None:
             self._hstat_gui.menuMain.setEnabled(True)
+            self._ship_stab_gui.menuMain.setEnabled(True)
             if isinstance(self.active_hull_form,HullGeneratorForm):
                 self.menuHullGenForm.setEnabled(True)
             else:
                 self.menuHullGenForm.setEnabled(False)
         else:
             self._hstat_gui.menuMain.setEnabled(False)
+            self._ship_stab_gui.menuMain.setEnabled(False)
 
 
     def on_referent_hull_form_changed(self):
@@ -173,6 +189,10 @@ class HullFormCommand(Command):
         if nlast == 0 and self.num_hullforms==1:
             self.active_hull_form=geometries[0]
             self.on_active_hull_form_changed()
+        elif self._last_active_guid == geometries[0].guid:
+            self.active_hull_form=geometries[0]
+            self.on_active_hull_form_changed()
+
 
     @Slot()
     def onGeometryRemoved(self, geometries:List[Geometry]):
@@ -190,6 +210,7 @@ class HullFormCommand(Command):
 
     def onModifyHullGeneratorForm(self):
         if isinstance(self.active_hull_form, HullGeneratorForm):
+            self.hf_prop = DialogHullGeneratorFormModify(self.mainwin)
             self.hf_prop.setCurrentHullForm(self.active_hull_form)
             self.hf_prop.exec()
 
@@ -262,20 +283,20 @@ class QTextSliderConnect(QLineEdit):
     def updatetxt(self,value):
         if not self.isTextChangeInProgress:
             self.value=self.min+(self.max-self.min)*(value-self.slider.minimum())/(self.slider.maximum()-self.slider.minimum())
-            self.setText(str(self.value))
+            self.setText("{:.3f}".format(self.value))
 
 
     def updateSlider(self):
         try:
-            self.value=float(self.text())
             if self.value < self.min:
                 self.value = self.min
-                self.setText(str(self.value))
             elif self.value > self.max:
                 self.value = self.max
-                self.setText(str(self.value))
+            self.setText("{:.3f}".format(self.value))
             value=self.value
-            value = int(round(self.slider.minimum()+ (self.slider.maximum()-self.slider.minimum())*(value-self.slider.minimum())/(self.max-self.min)))
+            smax = float(self.slider.maximum())
+            smin = float(self.slider.minimum())
+            value =smin + int((smax-smin)*(value-self.min)/(self.max-self.min))
             self.isTextChangeInProgress = True
             self.slider.setValue(value)
             self.isTextChangeInProgress = False
@@ -296,7 +317,7 @@ class DialogHullGeneratorFormModify(QDialog):
         self.mainLayout = QGridLayout()
 
         self.setLayout( self.mainLayout)
-        self.currentHullForm=0
+        self.currentHullForm:HullGeneratorForm=0
         self.shipdatanames=0
         self.shipdatamins =0
         self.shipdatamaxs =0
@@ -304,21 +325,34 @@ class DialogHullGeneratorFormModify(QDialog):
 
 
     def initDicts(self):
-        self.shipdatanames = {"loa_val":"Overall Length (LOA), m",
-                        "boa_val":"Overall Beam (BOA), m",
+        lmax = np.round(self.currentHullForm.shipdata['loa_val']*1.3,0)
+        lmin = np.round(self.currentHullForm.shipdata['loa_val'] * 0.7, 0)
+        bmax = np.round(self.currentHullForm.shipdata['boa_val'] * 1.3, 1)
+        bmin = np.round(self.currentHullForm.shipdata['boa_val'] * 0.7, 1)
+        dmax = np.round(self.currentHullForm.shipdata['depth_val'] * 1.3, 1)
+        dmin = np.round(self.currentHullForm.shipdata['depth_val'] * 0.7, 1)
+        self.shipdatanames = {"loa_val":"Overall length (LOA), m",
+                        "boa_val":"Overall beam (BOA), m",
                         'depth_val':"Depth (D)",
-                        "ms_val":"Midship Fullness",
-                        "bow_val":"Bow Fullness",
+                        "ms_val":"Midship fullness",
+                        "bow_val":"Bow slope",
                         "tr_stern_val":"Transom Fullness",
-                        "deck_val":"Forward Deck Fullness",
-                        "tb_val":"Transom Beam",
-                        "td_val":"Transom Draught",
+                        "deck_val":"Forward deck fullness",
+                        "tb_val":"Transom beam",
+                        "td_val":"Transom draught",
                         "acu_val":"ACU",
-                        "kf_val":"Forward Keel",
+                        "kf_val":"Forward keel position",
                         "sa_val":"Superstructure Angle, rad"}
-        self.shipdatamins = {"loa_val":0,
-                        "boa_val":0,
-                        'depth_val':0,
+        if self.currentHullForm.shipdata['use_fwd_for_aft']:
+            self.shipdatanames["tr_stern_val"] = "Stern slope"
+            self.shipdatanames["acu_val"] = "Stern keel position"
+            self.shipdatanames['tb_val'] = 'Stern deck fullness'
+            self.shipdatanames['anc_rise_bow'] = 'Bow rise factor'
+            self.shipdatanames['anc_rise_stern'] = 'Stern rise factor'
+            self.shipdatanames.pop("td_val")
+        self.shipdatamins = {"loa_val":lmin,
+                        "boa_val":bmin,
+                        'depth_val':dmin,
                         "ms_val":0.1,
                         "bow_val":0.1,
                         "tr_stern_val":0.1,
@@ -328,9 +362,16 @@ class DialogHullGeneratorFormModify(QDialog):
                         "acu_val":0.01,
                         "kf_val":0.51,
                         "sa_val":0}
-        self.shipdatamaxs  = {"loa_val": 300,
-                        "boa_val": 80,
-                        'depth_val': 10,
+        if self.currentHullForm.shipdata['use_fwd_for_aft']:
+            self.shipdatamins["tr_stern_val"] = 0.1
+            self.shipdatamins["acu_val"] = 0.0
+            self.shipdatamins['tb_val'] = 0.1
+            self.shipdatamins['anc_rise_bow'] = 0.0
+            self.shipdatamins['anc_rise_stern'] = 0.0
+            self.shipdatamins.pop("td_val")
+        self.shipdatamaxs  = {"loa_val": lmax,
+                        "boa_val": bmax,
+                        'depth_val': dmax,
                         "ms_val": 10,
                         "bow_val": 10,
                         "tr_stern_val": 10,
@@ -340,6 +381,14 @@ class DialogHullGeneratorFormModify(QDialog):
                         "acu_val": 0.49,
                         "kf_val": 0.99,
                         "sa_val": 0.8}
+        if self.currentHullForm.shipdata['use_fwd_for_aft']:
+            self.shipdatamaxs["tr_stern_val"] = 10.0
+            self.shipdatamaxs["acu_val"] = 0.49
+            self.shipdatamaxs['tb_val'] = 10.0
+            self.shipdatamaxs['anc_rise_bow'] = 2.0
+            self.shipdatamaxs['anc_rise_stern'] = 2.0
+            self.shipdatamaxs.pop("td_val")
+
     def createUserInputs(self,gridLayout:QGridLayout):
         i=0
         for key,value in self.shipdatanames.items():
@@ -348,17 +397,17 @@ class DialogHullGeneratorFormModify(QDialog):
             val = self.currentHullForm.shipdata[key]
             slider = QSliderTextConnect(Qt.Horizontal)
             slider.setFixedHeight(self.sizerow)
-            txt = QTextSliderConnect(self,slider)
-            self.shipdatatxt[key]=txt
-            txt.setAlignment(Qt.AlignRight)
-            txt.setFixedHeight(self.sizerow)
-            txt.setFixedWidth(50)
-            slider.valueChanged.connect(txt.updatetxt)
+            txt_slider = QTextSliderConnect(self,slider)
+            self.shipdatatxt[key]=txt_slider
+            txt_slider.setAlignment(Qt.AlignRight)
+            txt_slider.setFixedHeight(self.sizerow)
+            txt_slider.setFixedWidth(50)
+            slider.valueChanged.connect(txt_slider.updatetxt)
             slider.setMinimum(0)
             slider.setMaximum(1000)
-            txt.setminmaxval(self.shipdatamins[key],self.shipdatamaxs[key],val)
+            txt_slider.setminmaxval(self.shipdatamins[key],self.shipdatamaxs[key],val)
             gridLayout.addWidget(lbl, i, 0)
-            gridLayout.addWidget(txt, i, 1)
+            gridLayout.addWidget(txt_slider, i, 1)
             gridLayout.addWidget(slider, i, 2)
             i=i+1
         return i

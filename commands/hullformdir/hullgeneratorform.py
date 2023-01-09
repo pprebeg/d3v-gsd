@@ -26,7 +26,7 @@ def get_perpendicular_offset_point(p0:np.ndarray,p1:np.ndarray,plane_normal:np.n
     return perp_point
 
 def get_point_intersection_two_lines(a0:np.ndarray,a1:np.ndarray,b0:np.ndarray,b1:np.ndarray):
-    res = np.linalg.lstsq(np.array([a1 - a0, b0 - b1]).T, b0 - a0)
+    res = np.linalg.lstsq(np.array([a1 - a0, b0 - b1]).T, b0 - a0,rcond=None)
     t=res[0][0]
     p = (1 - t) * a0 + t * a1
     #p = (1 - s) * b0 + s * b1
@@ -107,7 +107,7 @@ class HullGeneratorForm(HullForm):
         self.rise_stern()
 
     def rise_stern(self):
-        use_rise = np.abs(1.0 - np.abs(self.shipdata['anc_rise_bow']*self.shipdata['anc_rise_stern'])) < 0.001
+        use_rise =np.abs(self.shipdata['anc_rise_bow']) > 0.001 or np.abs(self.shipdata['anc_rise_stern']) > 0.001
         if use_rise:
             depth = self.shipdata["depth_val"]
             rise_bow = depth * self.shipdata['anc_rise_bow']
@@ -149,9 +149,9 @@ class HullGeneratorForm(HullForm):
                     mesh.add_face(whs[iL - 1][ipL_1 - 1], whs[iL][ip],    whs[iL][ip-1])
 
     def _generateMesh(self, lines: list):
-        wooden_keel_width = self.shipdata['anc_keel_width']
+        wooden_keel_half_width = self.shipdata['anc_keel_width']/2.0
         wooden_keel_height = self.shipdata['anc_keel_height']
-        use_wooden_keel = (wooden_keel_width*wooden_keel_height > 0.0)
+        use_wooden_keel = (wooden_keel_half_width*wooden_keel_height > 0.0)
         mesh = om.TriMesh()
         om.PolyMesh()
         wlinesPos = lines[0]  # positive y waterlines
@@ -188,7 +188,7 @@ class HullGeneratorForm(HullForm):
             wlKeel_cl_offset[:, 2] = wlKeel_cl_offset[:, 2] - wooden_keel_height
             # Keel -  Positive waterlines
             wlKeel_pos = wlKeel_np.copy()
-            wlKeel_pos[:,1] = wooden_keel_width
+            wlKeel_pos[:,1] = wooden_keel_half_width
             wlKeel_pos_offset = wlKeel_pos.copy()
             wlKeel_pos_offset[:, 2] = wlKeel_pos_offset[:, 2]-wooden_keel_height
             #WL 1 - simmetry line, offset down
@@ -208,7 +208,7 @@ class HullGeneratorForm(HullForm):
             whsPos.append(whsi)
             p1 =  p.copy()
             p0 = p.copy()
-            p1[1] = wooden_keel_width
+            p1[1] = wooden_keel_half_width
             whsi.append(mesh.add_vertex(p0))
             whsi.append(mesh.add_vertex(p1))
             for i in range(num_pts):
@@ -217,7 +217,7 @@ class HullGeneratorForm(HullForm):
             p_1 = get_point_intersection_two_lines(wl_bow_offset_points[0], wl_bow_offset_points[1], np.array([0.0, 0.0, p0[2]]),
                                                   np.array([loa, 0.0, p0[2]]))
             p_2 = p_1.copy()
-            p_2[1] = wooden_keel_width
+            p_2[1] = wooden_keel_half_width
             whsi.append(mesh.add_vertex(p_2))
             whsi.append(mesh.add_vertex(p_1))
             # WL 3 - keel width, on hull
@@ -228,7 +228,7 @@ class HullGeneratorForm(HullForm):
             p0 = get_point_intersection_two_lines(a0, a1, p1,
                                                  p1 + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
             p1 = p0.copy()
-            p1[1] = wooden_keel_width
+            p1[1] = wooden_keel_half_width
             whsi.append(mesh.add_vertex(p0))
             whsi.append(mesh.add_vertex(p1))
             wl_keel_pos = []
@@ -240,12 +240,12 @@ class HullGeneratorForm(HullForm):
                 wl_keel_pos.append(pi)
             p_1 = wl_bow_offset_points[0]
             p_2 = p_1.copy()
-            p_2[1] = wooden_keel_width
+            p_2[1] = wooden_keel_half_width
             whsi.append(mesh.add_vertex(p_2))
             whsi.append(mesh.add_vertex(p_1))
             # Keel -  Negative waterlines
             wlKeel_neg = wlKeel_np.copy()
-            wlKeel_neg[:, 1] = -wooden_keel_width
+            wlKeel_neg[:, 1] = -wooden_keel_half_width
             wlKeel_neg_offset = wlKeel_neg.copy()
             wlKeel_neg_offset[:, 2] = wlKeel_neg_offset[:, 2] - wooden_keel_height
             # WL 1 - simmetry line, offset down
@@ -265,7 +265,7 @@ class HullGeneratorForm(HullForm):
             whsNeg.append(whsi)
             p1 = p.copy()
             p0 = p.copy()
-            p1[1] = -wooden_keel_width
+            p1[1] = -wooden_keel_half_width
             whsi.append(mesh.add_vertex(p0))
             whsi.append(mesh.add_vertex(p1))
             for i in range(num_pts):
@@ -273,7 +273,7 @@ class HullGeneratorForm(HullForm):
                 whsi.append(mesh.add_vertex(pi))
 
             p_2 = p_1.copy()
-            p_2[1] = -wooden_keel_width
+            p_2[1] = -wooden_keel_half_width
             whsi.append(mesh.add_vertex(p_2))
             whsi.append(mesh.add_vertex(p_1))
             # WL 3 - keel width, on hull
@@ -284,7 +284,7 @@ class HullGeneratorForm(HullForm):
             p0 = get_point_intersection_two_lines(a0, a1, p1,
                                                   p1 + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
             p1=p0.copy()
-            p1[1] = -wooden_keel_width
+            p1[1] = -wooden_keel_half_width
             whsi.append(mesh.add_vertex(p0))
             whsi.append(mesh.add_vertex(p1))
             wl_keel_neg = []
@@ -296,7 +296,7 @@ class HullGeneratorForm(HullForm):
                 wl_keel_neg.append(pi)
             p_1 = wl_bow_offset_points[0]
             p_2 = p_1.copy()
-            p_2[1] = -wooden_keel_width
+            p_2[1] = -wooden_keel_half_width
             whsi.append(mesh.add_vertex(p_2))
             whsi.append(mesh.add_vertex(p_1))
             # Positive waterlines
@@ -308,16 +308,16 @@ class HullGeneratorForm(HullForm):
                                                       wl[0] + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
                 whsi.append(mesh.add_vertex(p0))
                 p1 = p0.copy()
-                p1[1] =  wooden_keel_width
+                p1[1] =  wooden_keel_half_width
                 whsi.append(mesh.add_vertex(p1))
                 for ip in range(len(wl)):
                     p=wl[ip]
-                    if p[1]<wooden_keel_width:
-                        p[1] = wooden_keel_width
+                    if p[1]<wooden_keel_half_width:
+                        p[1] = wooden_keel_half_width
                     whsi.append(mesh.add_vertex(p))
                 p_1=wl_bow_offset_points[i]
                 p_2 =p_1.copy()
-                p_2[1] = wooden_keel_width
+                p_2[1] = wooden_keel_half_width
                 whsi.append(mesh.add_vertex(p_2))
                 whsi.append(mesh.add_vertex(p_1))
             # Negative waterlines
@@ -330,16 +330,16 @@ class HullGeneratorForm(HullForm):
                                                       wl[0] + np.array([-wooden_keel_height * 5, 0.0, 0.0]))
                 whsi.append(mesh.add_vertex(p0))
                 p1 = p0.copy()
-                p1[1] =  - wooden_keel_width
+                p1[1] =  - wooden_keel_half_width
                 whsi.append(mesh.add_vertex(p1))
                 for ip in range(len(wl)):
                     p = wl[ip]
-                    if p[1] > -wooden_keel_width:
-                        p[1] = -wooden_keel_width
+                    if p[1] > -wooden_keel_half_width:
+                        p[1] = -wooden_keel_half_width
                     whsi.append(mesh.add_vertex(p))
                 p_1 = wl_bow_offset_points[i]
                 p_2 = p_1.copy()
-                p_2[1] = -wooden_keel_width
+                p_2[1] = -wooden_keel_half_width
                 whsi.append(mesh.add_vertex(p_2))
                 whsi.append(mesh.add_vertex(p_1))
         else:
@@ -641,8 +641,8 @@ class HullGeneratorForm(HullForm):
             shipdata['use_fwd_for_aft']=False
             shipdata['anc_keel_width'] = 0.0
             shipdata['anc_keel_height'] = 0.0
-            shipdata['anc_rise_bow'] = 1.0
-            shipdata['anc_rise_stern'] = 1.0
+            shipdata['anc_rise_bow'] = 0.0
+            shipdata['anc_rise_stern'] = 0.0
             if False:
                 shipdata["app1"] = float(splitdata[21])
                 shipdata["area_app1"] = float(splitdata[22])

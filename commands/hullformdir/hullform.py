@@ -23,6 +23,13 @@ class HullForm(GeometryExtension):
             xmax = bb.maxCoord[0]
             return (xmax + xmin)/2.0
         return 0
+    def get_z_mid_z_max_from_mesh(self):
+        if self.mesh is not None:
+            bb=self.bbox
+            zmin = bb.minCoord[2]
+            zmax = bb.maxCoord[2]
+            return (zmax + zmin)/2.0, zmax
+        return 0,0
 
     def miror_mesh(self):
         if self.mesh is not None:
@@ -62,7 +69,7 @@ class HullForm(GeometryExtension):
 class HullFormFromMesh(HullForm):
     def __init__(self, fileName,name='',translation=np.zeros(3)):
         super().__init__(fileName,name,translation)
-        self._translation =np.array([1.0,0.0,0.0]) # kyrinia example
+        self._translation =np.array([0.0,0.0,0.0]) # kyrinia example
         self._original_mesh =self.read_file()
         self.regenerateHullHorm()
 
@@ -77,11 +84,11 @@ class HullFormFromMesh(HullForm):
 
     def regenerateHullHorm(self):
         if self._original_mesh is not None:
-            fvi = self._original_mesh.fv_indices()
-            points = self._original_mesh.points()
+            fvi = self._original_mesh.fv_indices().copy()
+            points = self._original_mesh.points().copy()
             points+=self._translation
             self.mesh =om.TriMesh(points, fvi)
-            self.miror_mesh() # kyrinia
+            #self.miror_mesh() # kyrinia
 
     def exportGeometry(self, fileName):
         HullFormFromMesh.export_hull_form(fileName,self)

@@ -53,7 +53,7 @@ class HydrostaticsGUI():
 
     def onCalculateHydrostatics(self):
         if isinstance(self.active_hull_form, HullForm):
-            hw=2
+            hw=5.0
             hscalc = Hydrostatics(self.active_hull_form)
             results=hscalc.get_hydrostatic_results(hw)
             result_names = ['h', 'Volume', 'Awl', 'Xwl', 'KBz', 'KBx', 'Ib', 'Il','Swet',
