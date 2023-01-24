@@ -20,6 +20,8 @@ try:
     from iohandlers import IOHandler
     from core import geometry_manager as manager
     from core.geometry import Geometry
+    from mainwin import MainFrame
+    from glwin import GlWin
     # d3v-gsd
     from hullformdir.hullform import *
     from hullformdir.hullgeneratorform import HullGeneratorForm
@@ -35,6 +37,8 @@ class HullFormCommand(Command):
         super().__init__()
         self._app = QApplication.instance()
         self._app.registerIOHandler(HullFormImporter())
+        self.mainwin.setMinimumSize(1024,768)
+        self.glwin.setMinimumSize(int(self.mainwin.width()*0.85),int(self.mainwin.height()*0.8))
 
         self.hf_prop = DialogHullGeneratorFormModify(self.mainwin)
         self.hf_opt = DialogHullGeneratorFormOptimize(self.mainwin)
@@ -97,12 +101,12 @@ class HullFormCommand(Command):
         #                                    'Select hull form file for import','../../../../examples/kyrenia',
         #                                    "hull form files (*.hgf *.huf *.obf *.obj *.stl)")
         fname = QFileDialog.getOpenFileName(self.mainwin,
-                                            '',
+                                            'Select hull form file for import',"",
                                             "hull form files (*.hgf *.huf *.obf *.obj *.stl)")
         fname = fname[0]
         if fname != "":
             hfi = HullFormImporter(True)
-            hf = hfi.importGeometry(fname)
+            hf = hfi.import_geometry(fname)
             if hf is not None:
                 hf.emit_geometry_built()
 
@@ -119,7 +123,7 @@ class HullFormCommand(Command):
         fname = QFileDialog.getSaveFileName(self.mainwin,
                                             'Export {0} form as'.format(self.active_hull_form.name),
                                             '', available_export)
-        
+
         fileName = fname[0]
         self.active_hull_form.exportGeometry(fileName)
 
@@ -225,11 +229,11 @@ class HullFormCommand(Command):
         return self._app
 
     @property
-    def mainwin(self):
+    def mainwin(self)->MainFrame:
         return self.app.mainFrame
 
     @property
-    def glwin(self):
+    def glwin(self)->GlWin:
         return self.mainwin.glWin
 
 class HullFormImporter(IOHandler):
@@ -237,7 +241,7 @@ class HullFormImporter(IOHandler):
         super().__init__()
         self.force_import=force_import
 
-    def importGeometry(self, fileName):
+    def import_geometry(self, fileName):
         if len(fileName) < 1:
             return
         filename_no_ext, file_extension = os.path.splitext(os.path.basename(fileName))
@@ -250,7 +254,7 @@ class HullFormImporter(IOHandler):
         if hf is not None:
             return hf
 
-    def exportGeometry(self, fileName, geometry2export):
+    def export_geometry(self, fileName, geometry2export):
         if isinstance(geometry2export,HullForm):
             geometry2export.exportGeometry(fileName)
         om.write_mesh(geometry2export.mesh,fileName)

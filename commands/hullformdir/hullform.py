@@ -41,6 +41,24 @@ class HullForm(GeometryExtension):
             points[:,0] = xmax-points[:,0]+xmin
             self.mesh = om.TriMesh(points, fvi)
 
+    def miror_mesh_around_simetry_plan(self):
+        if self.mesh is not None:
+            bb=self.bbox
+            xmin = bb.minCoord[0]
+            xmax = bb.maxCoord[0]
+            fvi = self.mesh.fv_indices()
+            points = self.mesh.points()
+            points2= points.copy()
+            points2[:,1]= - points2[:,1]
+            lpoints = list(points)
+            fvi2=fvi.copy()
+            fvi2=fvi2+len(lpoints)
+            lfvi = list(fvi)
+            lfvi.extend(list(fvi2))
+            lpoints.extend(list(points2))
+
+            self.mesh = om.TriMesh(lpoints, lfvi)
+
     def rise_mesh_ends(self,rise_bow,rise_stern):
         if self.mesh is not None:
             bb=self.bbox

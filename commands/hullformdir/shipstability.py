@@ -12,7 +12,7 @@ class ShipStability():
         self._ship_CG:np.ndarray = np.zeros(3)
 
     def calculate_displacement_and_displacementCG(self):
-        hwaterline = 5.0  # srednja visina vodne linije
+        hwaterline = 3000.0  # srednja visina vodne linije
         plane_point = np.array([0, 0, hwaterline])
         plane_normal = np.array([0, 0, -1])
 
@@ -109,24 +109,14 @@ class ShipStability():
 
     # fvs = [(1, 2, 40), (2, 3, 42), ...] Trokut, lista imena tocaka
     def get_mesh_below_inclined_waterline(self, fvs, points, plane_point, plane_normal):
-        def insert_point_based_on_sign(deck_points_pos, deck_points_neg, point):
-            if point[1] < 0:
-                deck_points_neg.append(point)
-            else:
-                deck_points_pos.append(point)
-
-        def make_new_triangles(fix_name, points, trianagles_bwl, deck_points):
-            n = len(points)
-            for i in range(len(deck_points) - 1):
-                points.append(deck_points[i])
-                points.append(deck_points[i + 1])
-                trianagles_bwl.append([fix_name, n, n + 1])
-                n += 2
+        # Add central point for hull_cover mesh
+        cp = np.zeros(3)
+        icp = len(points)
+        points.append(cp)
 
         d = plane_point.dot(plane_normal)
         trianagles_bwl = []
-        deck_points_pos = []
-        deck_points_neg = []
+        i_wl_0 = len(points)
         for fh in fvs:  # for TROKUT in TROKUTI:
             points_bwl = []
             points_owl = []
@@ -159,17 +149,22 @@ class ShipStability():
                 t2 = (d - plane_normal.dot(a)) / plane_normal.dot(c - a)
                 contact2 = a + (c - a) * t2
 
-                insert_point_based_on_sign(deck_points_pos, deck_points_neg, contact1)
-                insert_point_based_on_sign(deck_points_pos, deck_points_neg, contact2)
-
-                print('kontakt točke', contact1, contact2)
-
                 n = len(points)
+                points.append(contact1)
+                points.append(contact2)
+
+                # add hull triangle
                 if bwl_order[0] == 1:
                     fh_new = np.array([fh[bwl_order[0]], n + 1, n])
                     trianagles_bwl.append(fh_new)
+                    # add hull_cover triangle
+                    fh_new = np.array([n, n + 1, icp])
+                    trianagles_bwl.append(fh_new)
                 else:
                     fh_new = np.array([fh[bwl_order[0]], n, n + 1])
+                    trianagles_bwl.append(fh_new)
+                    # add hull_cover triangle
+                    fh_new = np.array([n+1, n, icp])
                     trianagles_bwl.append(fh_new)
 
             elif len(points_bwl) == 2:
@@ -183,46 +178,75 @@ class ShipStability():
                 t2 = (d - plane_normal.dot(a)) / plane_normal.dot(c - a)
                 contact2 = a + (c - a) * t2
 
-                insert_point_based_on_sign(deck_points_pos, deck_points_neg, contact1)
-                insert_point_based_on_sign(deck_points_pos, deck_points_neg, contact2)
-
-                print('kontakt točke', contact1, contact2)
-
                 n = len(points)
+                points.append(contact1)
+                points.append(contact2)
+                # add hull triangles
                 if owl_order[0] == 1:
                     fh_new = np.array([n, n + 1, fh[bwl_order[1]]])
                     trianagles_bwl.append(fh_new)
                     fh_new = np.array([n, fh[bwl_order[1]], fh[bwl_order[0]]])
+                    trianagles_bwl.append(fh_new)
+                    # add hull_cover triangle
+                    fh_new = np.array([n+1, n, icp])
                     trianagles_bwl.append(fh_new)
                 else:
                     fh_new = np.array([n, fh[bwl_order[1]], n + 1])
                     trianagles_bwl.append(fh_new)
                     fh_new = np.array([n, fh[bwl_order[0]], fh[bwl_order[1]]])
                     trianagles_bwl.append(fh_new)
+                    # add hull_cover triangle
+                    fh_new = np.array([n, n + 1, icp])
+                    trianagles_bwl.append(fh_new)
 
-        deck_points_pos.sort(key=lambda point: point[0])
-        deck_points_neg.sort(key=lambda point: point[0])
-
-        fix = deck_points_pos.pop(0)  # fix point izbacujemo iz liste deck points pos
-        points.append(fix)
-        fix_name = len(points) - 1  # dodavanje fix pointu ime
-        last_neg_point = None
-
-        for point in deck_points_pos:
-            if point[0] == deck_points_pos[-1][0] and point[1] == 0:  # provjera koja tocka na krmi je na sredini
-                deck_points_neg.append(point)  # fix point dodajemo u listu deck point neg
-                last_neg_point = len(deck_points_neg)  # dodavanje srednjoj tocki na krmi ime
-                break
-
-        make_new_triangles(fix_name, points, trianagles_bwl, deck_points_pos)
-        make_new_triangles(fix_name, points, trianagles_bwl, deck_points_neg)
-
-        second_to_last_neg_point = points[-2]
-        second_to_last_neg_point = len(points) - 2
-        trianagles_bwl[-1] = [fix_name, second_to_last_neg_point, last_neg_point]
-        points.pop()
-
+        deck_points = np.array(points[i_wl_0:]).tolist()
+        xmin = deck_points[0][0]
+        xmax = deck_points[0][0]
+        ixmax = 0
+        ixmin = 0
+        for i in range(len(deck_points)):
+            if deck_points[i][0] > xmax:
+                xmax = deck_points[i][0]
+                ixmax = i
+            if deck_points[i][0] < xmin:
+                xmin = deck_points[i][0]
+                ixmin = i
+        xcp = (xmax + xmin) / 2.0
+        zcp = (deck_points[ixmax][2] + deck_points[ixmin][2]) / 2.0
+        ycp = (deck_points[ixmax][1] + deck_points[ixmin][1]) / 2.0
+        cp[0]=xcp
+        cp[1] = ycp
+        cp[2]=zcp
         return trianagles_bwl, points
+
+    def generate_hull_cover_triangles(self,points:list,i_wl_0,fvi):
+        #Method is not used
+        deck_points_ixs=np.arange(i_wl_0,len(points)).tolist()
+        deck_points=np.array(points[i_wl_0:]).tolist()
+        xmin=deck_points[0][0]
+        xmax = deck_points[0][0]
+        ixmax=0
+        ixmin=0
+        for i in range(len(deck_points)):
+            if deck_points[i][0]>xmax:
+                xmax = deck_points[i][0]
+                ixmax =i
+            if deck_points[i][0] < xmin:
+                xmin = deck_points[i][0]
+                ixmin = i
+        for i in range(len(deck_points)):
+            deck_points[i][0]=deck_points[i][0]-(xmax - xmin)/2
+        #circular sort
+        deck_points_ixs_s =  [x for _, x in sorted(zip(deck_points, deck_points_ixs), key=lambda c:np.arctan2(c[0][0], c[0][1]))]
+        xcp=(xmax+xmin)/2.0
+        ycp=(deck_points[ixmax][1]+deck_points[ixmin][1])/2.0
+        zcp = (deck_points[ixmax][2] + deck_points[ixmin][2]) / 2.0
+        cp=np.array([xcp,ycp,zcp])
+        icp=len(points)
+        points.append(cp)
+        for i in range(len(deck_points_ixs_s)-1):
+            fvi.append(np.array([deck_points_ixs_s[i], deck_points_ixs_s[i+1],icp]))
+        fvi.append(np.array([deck_points_ixs_s[-1], deck_points_ixs_s[0], icp]))
 
     def calculate_displacement_and_centroid(self, fvs, points):
         displacement = 0
@@ -234,17 +258,22 @@ class ShipStability():
         return displacement, centroid / displacement
 
     def calculate_tethraedar_displacement_and_centroid(self, fh, points):
-        p1 = np.array(points[fh[0]])
-        p2 = np.array(points[fh[1]])
-        p3 = np.array(points[fh[2]])
+        try:
+            p1 = np.array(points[fh[0]])
+            p2 = np.array(points[fh[1]])
+            p3 = np.array(points[fh[2]])
 
-        v321 = p3[0] * p2[1] * p1[2]
-        v231 = p2[0] * p3[1] * p1[2]
-        v312 = p3[0] * p1[1] * p2[2]
-        v132 = p1[0] * p3[1] * p2[2]
-        v213 = p2[0] * p1[1] * p3[2]
-        v123 = p1[0] * p2[1] * p3[2]
-        displacement_of_tetrahedron = (1.0 / 6.0) * (-v321 + v231 + v312 - v132 - v213 + v123)
-        centroid_of_tetrahedron = (p1 + p2 + p3) / 4
+            v321 = p3[0] * p2[1] * p1[2]
+            v231 = p2[0] * p3[1] * p1[2]
+            v312 = p3[0] * p1[1] * p2[2]
+            v132 = p1[0] * p3[1] * p2[2]
+            v213 = p2[0] * p1[1] * p3[2]
+            v123 = p1[0] * p2[1] * p3[2]
+            displacement_of_tetrahedron = (1.0 / 6.0) * (-v321 + v231 + v312 - v132 - v213 + v123)
+            centroid_of_tetrahedron = (p1 + p2 + p3) / 4
+        except BaseException as error:
+            print('An exception occurred: {}'.format(error))
+        except:
+            print('Unknown exception occurred during signals connection')
 
         return displacement_of_tetrahedron, centroid_of_tetrahedron
