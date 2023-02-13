@@ -11,21 +11,26 @@ class ShipStability():
         self._ship_weight:float =0.0
         self._ship_CG:np.ndarray = np.zeros(3)
 
-    def calculate_displacement_and_displacementCG(self):
-        hwaterline = 3000.0  # srednja visina vodne linije
+    def calculate_displacement_and_displacementCG_example(self):
+        hwaterline = 5.0  # srednja visina vodne linije
         plane_point = np.array([0, 0, hwaterline])
-        plane_normal = np.array([0, 0, -1])
+        plane_normal = np.array([0, 0.0, -1])
+        displacement, displacementCG, new_fvs, new_pts = self.calculate_displacement_and_displacementCG(plane_point,plane_normal)
+        print('displacement', displacement)
+        print('displacement CG', displacementCG)
+        testgeo = GeometryExtension('Displ_Calc_Mesh')
+        testgeo.mesh = om.TriMesh(new_pts, new_fvs)
+        testgeo.emit_geometry_built()
+
+    def calculate_displacement_and_displacementCG(self,plane_point,plane_normal):
 
         fvs = self._hf.mesh.fv_indices().tolist()
         points = self._hf.mesh.points().tolist()
         # try:
         new_fvs, new_pts = self.get_mesh_below_inclined_waterline(fvs, points, plane_point, plane_normal)
         displacement, displacementCG = self.calculate_displacement_and_centroid(new_fvs, new_pts)
-        print('displacement',displacement)
-        print('displacement CG', displacementCG)
-        testgeo = GeometryExtension('Displ_Calc_Mesh')
-        testgeo.mesh = om.TriMesh(new_pts,new_fvs)
-        testgeo.emit_geometry_built()
+        return displacement, displacementCG, new_fvs, new_pts
+
 
     def calculate_drought_horizontal_waterline(self):
         self._ship_weight: float = 2000.0
@@ -37,9 +42,42 @@ class ShipStability():
         T=x[0]
         print('T',T)
 
-    def calculate_diference_ship_weight_displacement(self, T:float):
-        diff = self._ship_weight - self.calculate_displacement_horizontal_waterline(T)
-        return diff
+    def calculate_trim(self):
+        self._ship_weight: float = 3160
+        self._ship_CG: float = np.array([49.1,0.0,0.0])
+        Dmid,Dmax = self._hf.get_z_mid_z_max_from_mesh()
+
+
+        res = optimize.root(self.calculate_diference_ship_weight_displacement_CG,np.array([Dmid,0.0]))
+        print(res)
+        x=res['x']
+        T=x[0]
+        pl_nv_x=x[1]
+        print('T',T)
+        print('pl_nv_x', pl_nv_x)
+
+    def calculate_diference_ship_weight_displacement_CG(self, x):
+        T = x[0]
+        pl_nv_x = x[1]
+        plane_point = np.array([0, 0, T])
+        plane_normal = np.array([pl_nv_x, 0.0, -1])
+        displacement, displacementCG, new_fvs, new_pts = self.calculate_displacement_and_displacementCG(plane_point,
+                                                                                                        plane_normal)
+        diff1 = self._ship_weight - displacement
+        # Racunanje projekcija tezista istisnine i tezista broda na ravninu vodne linije
+        displacementCG_proj = self.project_point_on_plane(displacementCG, plane_point, plane_normal)
+        shipCG_proj = self.project_point_on_plane(self._ship_CG, plane_point, plane_normal)
+        # Racunanje razlike izmedu projekcija tezista istisnine i tezista broda
+        diff2 = np.linalg.norm(displacementCG_proj - shipCG_proj)
+        diff = diff1 ** 2 + diff2 ** 2
+        #return diff, 0
+        return diff1,diff2
+
+    def project_point_on_plane(self, point, plane_point, plane_normal):
+        d = -plane_normal.dot(plane_point)
+        t = -(plane_normal.dot(point) + d) / (plane_normal.dot(plane_normal))
+        projection = point + t * plane_normal
+        return projection
 
     def calculate_displacement_horizontal_waterline(self, T:float):
         plane_point = np.array([0, 0, T])
@@ -84,8 +122,6 @@ class ShipStability():
         def root_func(initial_guess):
             return initial_guess - self.calculate_displacement_and_centroid(fvs, points)[0]
 
-        print('LH: bcwl=', bcwl, ' displacement=', displacement, ' centroid=', centroid, )
-        print(optimize.root(root_func, 6500))
 
         mesh2calcWl2 = self.get_tria_for_calculation(fvs, points, hwaterline)
         fvs2calcWl2 = mesh2calcWl2[0]
@@ -213,9 +249,7 @@ class ShipStability():
                 ixmin = i
         xcp = (xmax + xmin) / 2.0
         zcp = (deck_points[ixmax][2] + deck_points[ixmin][2]) / 2.0
-        ycp = (deck_points[ixmax][1] + deck_points[ixmin][1]) / 2.0
         cp[0]=xcp
-        cp[1] = ycp
         cp[2]=zcp
         return trianagles_bwl, points
 

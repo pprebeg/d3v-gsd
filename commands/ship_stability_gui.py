@@ -50,17 +50,18 @@ class ShipStabilityGUI():
     def on_calculate_displacements(self):
         if isinstance(self.active_hull_form, HullForm):
             sscalc = ShipStability(self.active_hull_form)
-            sscalc.calculate_displacement_and_displacementCG()
+            sscalc.calculate_displacement_and_displacementCG_example()
 
-
-    def on_calculate_trim(self):
-        if isinstance(self.active_hull_form, HullForm):
-            pass
 
     def on_calculate_drought(self):
         if isinstance(self.active_hull_form, HullForm):
             sscalc = ShipStability(self.active_hull_form)
             sscalc.calculate_drought_horizontal_waterline()
+
+    def on_calculate_trim(self):
+        if isinstance(self.active_hull_form, HullForm):
+            sscalc = ShipStability(self.active_hull_form)
+            sscalc.calculate_trim()
 
 
     @property
