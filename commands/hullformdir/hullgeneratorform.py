@@ -464,7 +464,7 @@ class HullGeneratorForm(HullForm):
                 ogiveRadius.append(0)
 
         deckOutlinesHull = []  # Array with hull deck outline x, y coordinates
-        # Get y points for every x
+        # Get y pts for every x
         for ideck in range(len(midBeam)):  # For each deck in hull
             deckOutlinesHull.append([])  # For each deck create array
             if pdecks2[ideck] != 0:  # If not keel

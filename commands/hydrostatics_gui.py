@@ -5,7 +5,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, QRect
 from PySide6.QtGui import QColor, QPainter
 #from PySide6.QtCharts import QtCharts
 from PySide6 import QtCharts
-from PySide6.QtCore import SIGNAL,SLOT
+from PySide6.QtWidgets import QInputDialog
 import openmesh as om
 import numpy as np
 import os
@@ -53,13 +53,23 @@ class HydrostaticsGUI():
 
     def onCalculateHydrostatics(self):
         if isinstance(self.active_hull_form, HullForm):
-            hw=5.0
-            hscalc = Hydrostatics(self.active_hull_form)
-            results=hscalc.get_hydrostatic_results(hw)
-            result_names = ['h', 'Volume', 'Awl', 'Xwl', 'KBz', 'KBx', 'Ib', 'Il','Swet',
-                       'KMo','KMl','JZ', 'M1','delta','Cwl','CB','CP','CX']
-            print(result_names)
-            print(results)
+            text, ok = QInputDialog.getText(self.mainwin, 'Input Dialog',
+                                            'Input drought for calculation:')
+            if ok:
+                try:
+                    main_deck_z = self.active_hull_form.bbox.maxCoord[2] - 0.01
+                    wl_z = float(text)
+                    if wl_z <= main_deck_z:
+                        hscalc = Hydrostatics(self.active_hull_form)
+                        results = hscalc.get_hydrostatic_results(wl_z)
+                        result_names = ['h', 'Volume', 'Awl', 'Xwl', 'KBz', 'KBx', 'Ib', 'Il', 'Swet',
+                                        'KMo', 'KMl', 'JZ', 'M1', 'delta', 'Cwl', 'CB', 'CP', 'CX']
+                        print(result_names)
+                        print(results)
+                    else:
+                        print('ERROR: Inputed drought greater than ship height. Calculation ommitted!')
+                except:
+                    print('ERROR: Inputed drought is not a number. Calculation ommitted!')
 
 
     @property
