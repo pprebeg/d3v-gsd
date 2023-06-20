@@ -148,7 +148,9 @@ class Waterline():
 class ShipStability():
     def __init__(self, hull_form:HullForm,main_deck_z,sea_density = 1025.9):
         self._hf = hull_form
-        self._xmf=self._hf.get_x_main_frame_from_mesh()
+        self._xmf = 0.0
+        if self._hf is not None:
+            self._xmf = self._hf.get_x_main_frame_from_mesh()
         self._sea_density = sea_density
         self._ship_weight:float =0.0
         self._ship_CG:np.ndarray = np.zeros(3)
@@ -157,16 +159,18 @@ class ShipStability():
         self._mesh = self.get_mesh_form_closed_with_main_deck()
 
     def get_mesh_form_closed_with_main_deck(self):
-        fvs = self._hf.mesh.fv_indices().tolist()
-        points = self._hf.mesh.points().tolist()
-        plane_point = np.array([self._xmf,0.0,self._main_deck_z])
-        plane_normal = Waterline.ref_plane_normal()
-        new_fvs, new_pts = self.get_mesh_below_inclined_waterline(fvs, points, plane_point, plane_normal)
-        mesh =  om.TriMesh(new_pts,new_fvs)
-        testgeo = GeometryExtension('Closed Hull Form')
-        testgeo.mesh = om.TriMesh(new_pts, new_fvs)
-        testgeo.emit_geometry_built()
-        return mesh
+        if self._hf is not None:
+            fvs = self._hf.mesh.fv_indices().tolist()
+            points = self._hf.mesh.points().tolist()
+            plane_point = np.array([self._xmf,0.0,self._main_deck_z])
+            plane_normal = Waterline.ref_plane_normal()
+            new_fvs, new_pts = self.get_mesh_below_inclined_waterline(fvs, points, plane_point, plane_normal)
+            mesh =  om.TriMesh(new_pts,new_fvs)
+            testgeo = GeometryExtension('Closed Hull Form')
+            testgeo.mesh = om.TriMesh(new_pts, new_fvs)
+            testgeo.emit_geometry_built()
+            return mesh
+        return None
     @property
     def wl(self)->Waterline:
         return self._wl
@@ -335,6 +339,11 @@ class ShipStability():
 
     def point_distance(self, a, b):
         return math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2 + (b[2] - a[2]) ** 2)
+
+    def get_mesh_below_inclined_waterline_numpy\
+                    (self, fvs:List[np.ndarray],points:List[np.ndarray],plane_point:np.ndarray,plane_normal:np.ndarray):
+        #TODO
+        return None, None
 
     def get_mesh_below_inclined_waterline\
                     (self, fvs:List[np.ndarray],points:List[np.ndarray],plane_point:np.ndarray,plane_normal:np.ndarray):
@@ -528,6 +537,46 @@ def test_wl_2():
     v = np.cross(wl.normal,u)
     print(v)
 
+def create_box():
+        dx=0
+        dy = 0
+        dz = 0
+        p=[]
+        p.append(np.array([-1+dx, -1+dy, -1+dz])) # 0
+        p.append(np.array([-1+dx, -1+dy,  1+dz])) # 1
+        p.append(np.array([-1+dx,  1+dy, -1+dz])) # 2
+        p.append(np.array([-1+dx,  1+dy,  1+dz])) # 3
+        p.append(np.array([ 1+dx, -1+dy, -1+dz])) # 4
+        p.append(np.array([ 1+dx, -1+dy,  1+dz])) # 5
+        p.append(np.array([ 1+dx,  1+dy, -1+dz])) # 6
+        p.append(np.array([ 1+dx,  1+dy,  1+dz])) # 7
+        fvi = []
+        fvi.append(np.array([0, 6, 4]))
+        fvi.append(np.array([0, 2, 6]))
+
+        fvi.append(np.array([0, 4, 5]))
+        fvi.append(np.array([0, 5, 1]))
+
+        fvi.append(np.array([0, 3, 2]))
+        fvi.append(np.array([0, 1, 3]))
+
+        fvi.append(np.array([6, 2, 3]))
+        fvi.append(np.array([6, 3, 7]))
+
+        fvi.append(np.array([4, 7, 5]))
+        fvi.append(np.array([4, 6, 7]))
+
+        fvi.append(np.array([1, 5, 7]))
+        fvi.append(np.array([1, 7, 3]))
+        return p,fvi
+def test_numpy_mbw():
+    points,fvi = create_box()
+    plane_normal=np.array([0.0, 0.0, -1])
+    plane_point = np.array([0.0, 0.0, 0.5])
+
+    sscalc = ShipStability(None,0)
+    sscalc.get_mesh_below_inclined_waterline_numpy(fvi, points, plane_point, plane_normal)
+
 if __name__ == "__main__":
     # Test
-    test_wl_2()
+    test_numpy_mbw()
